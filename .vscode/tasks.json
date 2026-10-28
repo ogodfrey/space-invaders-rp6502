@@ -1,0 +1,40 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "RP6502: update tools",
+            "type": "process",
+            "command": "cmake",
+            "args": [
+                "-P",
+                "${workspaceFolder}/tools/rp6502.cmake"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "RP6502: compile active file",
+            "type": "process",
+            "command": "${userHome}/.rp6502/cc65/bin/cc65",
+            "args": [
+                "-t",
+                "rp6502",
+                "-o",
+                "${workspaceFolder}/build/cc65/debug/${fileBasenameNoExtension}.s",
+                "${file}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/build/cc65/debug"
+            },
+            "group": "build",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": "$gcc"
+        },
+    ]
+}
