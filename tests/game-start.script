@@ -6,6 +6,7 @@ press right                                         # hold the right arrow
 run 1                                               # one frame: one step
 peek player_u 74                                    # ship moved 2 units (4 px)
 release right                                       # let go of the arrow
+poke player_u 64                                    # line the ship up under grid column 4
 press space                                         # press Space to fire
 run 2                                               # let the bullet start
 peek bullet_active 1                                # a bullet is in flight

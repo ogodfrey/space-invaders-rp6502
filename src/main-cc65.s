@@ -15,15 +15,17 @@ PLAYER_PY            = 200                          ; player sprite top row, in 
 PLAYER_START_U       = 72                           ; player start x, in 2-pixel units
 PLAYER_MIN_U         = 0                            ; leftmost player x
 PLAYER_MAX_U         = 152                          ; rightmost player x (320 px - 16 px sprite)
-ALIEN_PY             = 56                           ; alien sprite top row, in pixels
-ALIEN_START_U        = 72                           ; alien start x, in 2-pixel units
-ALIEN_MIN_U          = 0                            ; leftmost alien x
-ALIEN_MAX_U          = 152                          ; rightmost alien x
-ALIEN_STEP_U         = 4                            ; alien move per step (8 px)
+GRID_COLS            = 6                            ; aliens per row in the grid
+GRID_ROWS            = 5                            ; rows of aliens in the grid
+GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid
+GRID_PY              = 40                           ; top row of the first alien row, in pixels
+GRID_START_U         = 0                            ; starting grid x, in 2-pixel units
+GRID_MIN_U           = 0                            ; leftmost grid x
+GRID_MAX_U           = 72                           ; rightmost grid x (last column ends at the right edge)
+ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
 ALIEN_STEP_FRAMES    = 48                           ; frames between alien steps
-ALIEN_RESPAWN_FRAMES = 60                           ; frames before a killed alien returns
 
 .segment "RODATA"                                   ; read-only data goes in ROM
 
@@ -87,15 +89,36 @@ row_hi:                                             ; high byte of each row's ad
     .byte >(XRAM_BITMAP + I * (BITMAP_WIDTH_PX / 2)) ; high byte of the same address
 .endrepeat                                          ; end of the row_hi table
 
+; Each grid alien's x offset (in 2-pixel units) and top row (in pixels).
+; Index = row * GRID_COLS + column, matching grid_alive.
+grid_col_u:                                         ; x offset of each grid alien
+.repeat GRID_ROWS, R                                ; one group of columns per row
+    .repeat GRID_COLS, C                            ; one entry per column
+        .byte C * 16                                ; columns are 32 px apart (16 units)
+    .endrepeat                                      ; end of the columns
+.endrepeat                                          ; end of the rows
+grid_row_py:                                        ; top row of each grid alien
+.repeat GRID_ROWS, R                                ; one group of columns per row
+    .repeat GRID_COLS, C                            ; one entry per column
+        .byte GRID_PY + R * 16                      ; rows are 16 px apart
+    .endrepeat                                      ; end of the columns
+.endrepeat                                          ; end of the rows
+
 .segment "BSS"                                      ; zero-initialized RAM for variables
 
 player_u:      .res 1                               ; player x, in 2-pixel units
-alien_u:       .res 1                               ; alien x, in 2-pixel units
-alien_dir:     .res 1                               ; alien step per move: +4 or -4 (as $FC)
+grid_u:        .res 1                               ; grid x offset, in 2-pixel units
+alien_dir:     .res 1                               ; grid step per move: +4 or -4 (as $FC)
 alien_frame:   .res 1                               ; 0 or 1: which alien sprite to draw
-alien_alive:   .res 1                               ; 1 while the alien is on screen
-alien_timer:   .res 1                               ; frames since the alien last moved
-respawn_timer: .res 1                               ; frames left before a killed alien returns
+alien_timer:   .res 1                               ; frames since the grid last moved
+grid_alive:    .res GRID_COUNT                      ; 1 while each grid alien is on screen
+grid_i:        .res 1                               ; index of the grid alien being handled
+grid_src:      .res 2                               ; XRAM address of the sprite for grid draws
+grid_stride:   .res 1                               ; source advance per row for grid draws
+hit_x:         .res 1                               ; x of the alien being tested for a hit
+hit_y:         .res 1                               ; top row of the alien being tested
+hit_b:         .res 1                               ; bottom row (exclusive) of that alien
+bullet_b:      .res 1                               ; bottom row (exclusive) of the bullet
 bullet_active: .res 1                               ; 1 while a bullet is in flight
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
@@ -200,16 +223,20 @@ _main:                                              ; program entry point
 
     lda #PLAYER_START_U                             ; starting player x
     sta player_u                                    ; store the player's x
-    lda #ALIEN_START_U                              ; starting alien x
-    sta alien_u                                     ; store the alien's x
+    lda #GRID_START_U                               ; starting grid x
+    sta grid_u                                      ; store the grid's x
     lda #ALIEN_STEP_U                               ; start moving right (+4)
-    sta alien_dir                                   ; store the alien's direction
-    lda #1                                          ; the alien starts alive
-    sta alien_alive                                 ; store the alive flag
+    sta alien_dir                                   ; store the grid's direction
     lda #0                                          ; first animation frame
     sta alien_frame                                 ; store the animation frame
     sta alien_timer                                 ; clear the alien move timer
-    sta respawn_timer                               ; clear the respawn timer
+    ldx #GRID_COUNT-1                               ; start at the last alien
+@fill:                                              ; mark every grid alien alive
+    lda #1                                          ; alive
+    sta grid_alive,x                                ; store the flag
+    dex                                             ; the previous alien
+    bpl @fill                                       ; until index 0 is set
+    lda #0                                          ; zero for the flags and score below
     sta bullet_active                               ; no bullet in flight yet
     sta bullet_timer                                ; clear the bullet move timer
     sta prev_space                                  ; Space was not held last frame
@@ -225,7 +252,7 @@ _main:                                              ; program entry point
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_help, str_help_len                  ; print the control hint
-    jsr draw_alien                                  ; draw the alien
+    jsr draw_grid                                   ; draw the alien grid
     jsr draw_player                                 ; draw the player
     lda RIA_VSYNC                                   ; read the current VSYNC count
     sta last_vsync                                  ; remember it as the last frame
@@ -267,7 +294,7 @@ main_loop:                                          ; one pass per video frame
     pla                                             ; restore this frame's Space state
     sta prev_space                                  ; remember it for next frame
     jsr update_bullet                               ; move the bullet
-    jsr update_alien                                ; move the alien
+    jsr update_grid                                 ; move the alien grid
     jmp main_loop                                   ; next frame
 
 ; Writes the byte in A to the console when the UART is ready.
@@ -441,16 +468,59 @@ blit:                                               ; copy a block from XRAM to 
     bne @row                                        ; until all rows are copied
     rts                                             ; return
 
-draw_alien:                                         ; draw the alien if it is alive
-    lda alien_alive                                 ; is the alien alive?
-    beq @done                                       ; no: draw nothing
-    lda alien_frame                                 ; which animation frame?
-    bne @frame1                                     ; frame 1: draw the second sprite
-    BLIT XRAM_ALIEN_A_SPRITE, 8, 8, 8, alien_u, #ALIEN_PY ; draw frame A
-    rts                                             ; return
-@frame1:                                            ; frame B
-    BLIT XRAM_ALIEN_B_SPRITE, 8, 8, 8, alien_u, #ALIEN_PY ; draw frame B
-@done:                                              ; common exit
+draw_grid:                                          ; draw every living grid alien in the current frame
+    lda #<XRAM_ALIEN_A_SPRITE                       ; low byte of frame A's address
+    sta grid_src                                    ; store it as the source
+    lda #>XRAM_ALIEN_A_SPRITE                       ; high byte of frame A's address
+    sta grid_src+1                                  ; store it
+    lda alien_frame                                 ; which frame is showing?
+    beq @stride                                     ; frame 0: keep frame A
+    lda #<XRAM_ALIEN_B_SPRITE                       ; low byte of frame B's address
+    sta grid_src                                    ; store it as the source
+    lda #>XRAM_ALIEN_B_SPRITE                       ; high byte of frame B's address
+    sta grid_src+1                                  ; store it
+@stride:                                            ; sprite rows are 8 bytes apart
+    lda #8                                          ; sprite row stride in bytes
+    sta grid_stride                                 ; store it
+    jmp grid_apply                                  ; blit every living alien
+
+erase_grid:                                         ; erase every living grid alien
+    lda #<XRAM_BLANK                                ; low byte of the zero byte's address
+    sta grid_src                                    ; erasing reads the zero byte
+    lda #>XRAM_BLANK                                ; high byte of its address
+    sta grid_src+1                                  ; store it
+    lda #0                                          ; stride 0 repeats the zero byte
+    sta grid_stride                                 ; store it
+    jmp grid_apply                                  ; blit over every living alien
+
+grid_apply:                                         ; blit an 8x8 block at each living alien
+    lda #0                                          ; start at the first alien
+    sta grid_i                                      ; store the index
+@loop:                                              ; one alien per pass
+    ldx grid_i                                      ; the current alien's index
+    lda grid_alive,x                                ; is this alien alive?
+    beq @skip                                       ; no: nothing to draw
+    lda grid_src                                    ; source low byte
+    sta blit_src                                    ; hand it to the blitter
+    lda grid_src+1                                  ; source high byte
+    sta blit_src+1                                  ; hand it to the blitter
+    lda grid_stride                                 ; source stride
+    sta blit_stride                                 ; hand it to the blitter
+    lda #8                                          ; 8 bytes wide (16 px)
+    sta blit_w                                      ; hand it to the blitter
+    sta blit_h                                      ; 8 rows tall
+    lda grid_u                                      ; the grid's x offset
+    clc                                             ; prepare to add
+    adc grid_col_u,x                                ; add this alien's column offset
+    sta blit_x                                      ; destination x
+    lda grid_row_py,x                               ; this alien's top row
+    sta blit_y                                      ; destination top row
+    jsr blit                                        ; copy the block
+@skip:                                              ; move to the next alien
+    inc grid_i                                      ; advance the index
+    lda grid_i                                      ; the index
+    cmp #GRID_COUNT                                 ; past the last alien?
+    bne @loop                                       ; no: keep going
     rts                                             ; return
 
 draw_player:                                        ; draw the player ship
@@ -522,23 +592,52 @@ update_bullet:                                      ; move the bullet and check 
     sec                                             ; set carry for subtraction
     sbc #BULLET_STEP_PX                             ; move up one step
     sta bullet_y                                    ; store the new row
-    lda alien_alive                                 ; is there an alien to hit?
-    beq @draw                                       ; no: just draw the bullet
-    lda bullet_y                                    ; the new row
-    cmp #ALIEN_PY+8                                 ; has the bullet reached the alien's row?
-    bcs @draw                                       ; no: keep flying
+    jsr check_hits                                  ; did the bullet hit a grid alien?
+    bne @spent                                      ; yes: the bullet is gone
+    BLIT XRAM_BULLET_SPRITE, 1, 8, 1, bullet_u, bullet_y ; draw it at its new position
+    rts                                             ; return
+@spent:                                             ; the bullet hit something
+    rts                                             ; return
+
+; Tests the bullet against each living grid alien. Returns A = 1 on a hit,
+; after erasing the alien, adding to the score, and ending the bullet.
+check_hits:                                         ; bullet vs grid
+    lda bullet_y                                    ; the bullet's top row
+    clc                                             ; prepare to add
+    adc #8                                          ; its bottom row
+    sta bullet_b                                    ; store it for every alien test
+    lda #0                                          ; start at the first alien
+    sta grid_i                                      ; store the index
+@loop:                                              ; one alien per pass
+    ldx grid_i                                      ; the current alien's index
+    lda grid_alive,x                                ; is it alive?
+    beq @next                                       ; no: it cannot be hit
+    lda grid_row_py,x                               ; the alien's top row
+    sta hit_y                                       ; remember it
+    clc                                             ; prepare to add
+    adc #8                                          ; the alien's bottom row
+    sta hit_b                                       ; remember it
+    lda bullet_y                                    ; the bullet's top row
+    cmp hit_b                                       ; at or below the alien's bottom?
+    bcs @next                                       ; yes: no overlap
+    lda hit_y                                       ; the alien's top row
+    cmp bullet_b                                    ; at or below the bullet's bottom?
+    bcs @next                                       ; yes: no overlap
+    lda grid_u                                      ; the grid's x offset
+    clc                                             ; prepare to add
+    adc grid_col_u,x                                ; the alien's x
+    sta hit_x                                       ; remember it
     lda bullet_u                                    ; the bullet's x
-    cmp alien_u                                     ; left of the alien?
-    bcc @draw                                       ; yes: a miss
+    cmp hit_x                                       ; left of the alien?
+    bcc @next                                       ; yes: a miss
     sec                                             ; set carry for subtraction
-    sbc alien_u                                     ; distance from the alien's left edge
+    sbc hit_x                                       ; distance from the alien's left edge
     cmp #8                                          ; within the 8-unit (16 px) width?
-    bcs @draw                                       ; no: a miss
-    BLIT XRAM_BLANK, 8, 8, 0, alien_u, #ALIEN_PY    ; erase the alien: it is hit
+    bcs @next                                       ; no: a miss
+    BLIT XRAM_BLANK, 8, 8, 0, hit_x, hit_y          ; erase the alien: it is hit
+    ldx grid_i                                      ; BLIT used X, so reload the index
     lda #0                                          ; the alien is no longer alive
-    sta alien_alive                                 ; store the flag
-    lda #ALIEN_RESPAWN_FRAMES                       ; wait this long before it returns
-    sta respawn_timer                               ; store the timer
+    sta grid_alive,x                                ; store the flag
     inc score                                       ; add one to the score
     bne @score_done                                 ; no carry out of the low byte: done
     inc score+1                                     ; carry into the high byte
@@ -546,12 +645,20 @@ update_bullet:                                      ; move the bullet and check 
     jsr draw_score                                  ; redraw the score
     lda #0                                          ; the bullet is spent
     sta bullet_active                               ; mark it as gone
+    lda #1                                          ; report a hit
     rts                                             ; return
-@draw:                                              ; the bullet keeps flying
-    BLIT XRAM_BULLET_SPRITE, 1, 8, 1, bullet_u, bullet_y ; draw it at its new position
+@next:                                              ; move to the next alien
+    inc grid_i                                      ; advance the index
+    lda grid_i                                      ; the index
+    cmp #GRID_COUNT                                 ; past the last alien?
+    beq @no_hit                                     ; past the last alien: no hit
+    jmp @loop                                       ; no: keep testing
+@no_hit:                                            ; every alien was tested
+    lda #0                                          ; no hit
     rts                                             ; return
 
-update_alien:                                       ; move the alien, or count down its respawn
+; Moves the grid one step when it is due: erase, shift, toggle frame, redraw.
+update_grid:                                        ; move the alien grid
     inc alien_timer                                 ; count a frame
     lda alien_timer                                 ; the frame count
     cmp #ALIEN_STEP_FRAMES                          ; time to move?
@@ -560,39 +667,24 @@ update_alien:                                       ; move the alien, or count d
 @tick:                                              ; a move is due
     lda #0                                          ; restart the timer
     sta alien_timer                                 ; store it
-    lda alien_alive                                 ; is the alien on screen?
-    bne @march                                      ; yes: march it
-    lda respawn_timer                               ; the respawn countdown
-    bne @count                                      ; not finished: count down
-    lda #1                                          ; respawn time: the alien comes back alive
-    sta alien_alive                                 ; store the flag
-    lda #ALIEN_START_U                              ; back to the starting x
-    sta alien_u                                     ; store it
-    lda #ALIEN_STEP_U                               ; start moving right
-    sta alien_dir                                   ; store the direction
-    jmp draw_alien                                  ; draw the returned alien
-@count:                                             ; the alien is still away
-    dec respawn_timer                               ; one frame closer to returning
-    rts                                             ; return
-@march:                                             ; move the living alien
-    BLIT XRAM_BLANK, 8, 8, 0, alien_u, #ALIEN_PY    ; erase it at its old position
+    jsr erase_grid                                  ; erase the grid at its old position
     lda alien_frame                                 ; current animation frame
     eor #1                                          ; flip between 0 and 1
     sta alien_frame                                 ; store the new frame
-    lda alien_u                                     ; current x
-    cmp #ALIEN_MIN_U                                ; at the left edge?
+    lda grid_u                                      ; current grid x
+    cmp #GRID_MIN_U                                 ; at the left edge?
     bne @check_max                                  ; no: check the right edge
     lda #ALIEN_STEP_U                               ; at the left edge: turn right
     sta alien_dir                                   ; store the direction
     jmp @step                                       ; then move
 @check_max:                                         ; not at the left edge
-    cmp #ALIEN_MAX_U                                ; at the right edge?
+    cmp #GRID_MAX_U                                 ; at the right edge?
     bne @step                                       ; no: keep the direction
     lda #256-ALIEN_STEP_U                           ; at the right edge: turn left (-4)
     sta alien_dir                                   ; store the direction
 @step:                                              ; move by the direction
-    lda alien_u                                     ; current x
+    lda grid_u                                      ; current grid x
     clc                                             ; prepare to add
     adc alien_dir                                   ; add the step (may be negative)
-    sta alien_u                                     ; store the new x
-    jmp draw_alien                                  ; draw it at the new position
+    sta grid_u                                      ; store the new grid x
+    jmp draw_grid                                   ; draw the grid at its new position
