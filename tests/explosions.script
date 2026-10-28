@@ -1,0 +1,25 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke alien_timer 0                                  # the grid will not move during the test
+poke bullet_timer 3                                 # the bullet moves on the next frame
+poke bullet_y 112                                   # just below the bottom row of aliens
+poke bullet_u 65                                    # inside column 5 (x = 64 to 67)
+poke bullet_active 1                                # the bullet is in flight
+run 2                                               # the bullet hits the bottom row
+peek grid_alive+49 0                                # the alien is gone
+peek ex_t 11                                        # a burst is showing in slot 0 (one frame already counted)
+peek ex_x 64                                        # at the alien's x
+wait ex_t 0 60                                      # the burst counts down to nothing
+peek ex_t 0                                         # and its slot is free again
+poke bomb_active 1                                  # put a bomb directly above the ship
+poke bomb_u 76                                      # the ship is at x = 76
+poke bomb_y 184                                     # two steps above the ship
+run 20                                              # the bomb hits and the ship is destroyed
+peek player_dead 1                                  # the ship is down
+peek ex_x 76                                        # the left half of its burst is at the ship
+peek ex_x+1 80                                      # the right half is 4 bytes over
+wait ex_t 0 100                                    # the bursts last 60 frames, then clear
+peek ex_t+1 0                                      # and the right half is cleared too

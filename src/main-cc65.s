@@ -34,6 +34,9 @@ LIVES_START          = 3                            ; ships per game, as in arca
 ATTRACT_TITLE_FRAMES = 240                          ; frames the title screen stays up before the high score (4 s)
 ATTRACT_SCORE_FRAMES = 120                          ; frames the high-score screen stays up (2 s)
 DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
+EXPL_SLOTS           = 4                            ; bursts that can be on screen at once
+EXPL_FRAMES          = 12                           ; frames an alien or saucer burst stays
+EXPL_DEATH_FRAMES    = 60                           ; frames the ship's burst stays
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
 SHIELD_COUNT         = 4                            ; bunkers, as in arcade
 SHIELD_COLS          = 11                           ; cells across one bunker (2 px each)
@@ -223,6 +226,14 @@ sprite_rom:                                         ; all sprite data in XRAM or
     .byte $00, $03, $30, $00, $00, $00, $03, $30    ; UFO row 5
     .byte $00, $00, $00, $00, $00, $00, $00, $00    ; UFO row 6: blank
     .byte $00, $00, $00, $00, $00, $00, $00, $00    ; UFO row 7: blank
+    .byte $10, $00, $00, $01                        ; explosion row 0: burst, 4 bytes by 8 rows
+    .byte $01, $00, $00, $10                        ; explosion row 1
+    .byte $00, $10, $01, $00                        ; explosion row 2
+    .byte $00, $01, $10, $00                        ; explosion row 3
+    .byte $00, $01, $10, $00                        ; explosion row 4
+    .byte $00, $10, $01, $00                        ; explosion row 5
+    .byte $01, $00, $00, $10                        ; explosion row 6
+    .byte $10, $00, $00, $01                        ; explosion row 7
 
 ; XRAM address of each bitmap row, for the blitter.
 row_lo:                                             ; low byte of each row's address
@@ -326,6 +337,13 @@ ufo_wait_lo:   .res 1                               ; frames until the next sauc
 ufo_wait_hi:   .res 1                               ; frames until the next saucer, high byte
 shots_fired:   .res 1                               ; player shots fired, for the saucer's points
 extra_given:   .res 1                               ; 1 once this game's extra ship has been awarded
+ex_x:          .res EXPL_SLOTS                      ; each burst's x, in 2-pixel units
+ex_y:          .res EXPL_SLOTS                      ; each burst's top row
+ex_t:          .res EXPL_SLOTS                      ; frames left on each burst; 0 = slot free
+ex_arg_x:      .res 1                               ; x for the next burst to spawn
+ex_arg_y:      .res 1                               ; y for the next burst to spawn
+ex_arg_t:      .res 1                               ; length for the next burst to spawn
+ex_slot:       .res 1                               ; slot being updated
 bomb_iv:       .res 1                               ; frames between bomb steps this wave
 bomb_snd:      .res 1                               ; frames left in the bomb's launch sound
 hi_lo:         .res 1                               ; best score this session, low byte
@@ -418,7 +436,7 @@ _main:                                              ; program entry point
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
     UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 192      ; copy the player and squid and crab sprites
-    UPLOAD XRAM_OCTO_A, sprite_rom+192, 144         ; copy the octopus, bullet, bomb, and saucer sprites
+    UPLOAD XRAM_OCTO_A, sprite_rom+192, 176         ; copy the octopus, bullet, bomb, saucer, and burst sprites
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address
@@ -530,6 +548,7 @@ main_loop:                                          ; one pass per video frame
     jmp main_loop                                   ; next frame
 @play:                                              ; the game is running
     jsr update_sound                                ; the effects and the bassline
+    jsr update_explosions                           ; count down and erase finished bursts
     lda player_dead                                 ; is the ship destroyed?
     beq @live                                       ; no: play normally
     jsr dead_frame                                  ; count down the pause, then respawn
@@ -914,10 +933,14 @@ check_hits:                                         ; bullet vs grid
     sta hit_b                                       ; remember it
     lda bullet_y                                    ; the bullet's top row
     cmp hit_b                                       ; at or below the alien's bottom?
-    bcs @next                                       ; yes: no overlap
+    bcc @above_bottom                               ; no: the bullet may overlap
+    jmp @next                                       ; yes: no overlap
+@above_bottom:                                      ; the bullet's top is above the alien's bottom
     lda hit_y                                       ; the alien's top row
     cmp bullet_b                                    ; at or below the bullet's bottom?
-    bcs @next                                       ; yes: no overlap
+    bcc @rows_overlap                               ; no: the rows overlap
+    jmp @next                                       ; yes: no overlap
+@rows_overlap:                                      ; the rows overlap
     lda grid_u                                      ; the grid's x offset
     clc                                             ; prepare to add
     adc grid_col_u,x                                ; the alien's x
@@ -930,7 +953,13 @@ check_hits:                                         ; bullet vs grid
     cmp #ALIEN_W_BYTES                              ; within the alien's width?
     bcs @next                                       ; no: a miss
     BLIT XRAM_BLANK, ALIEN_W_BYTES, 8, 0, hit_x, hit_y ; erase the alien: it is hit
-    ldx grid_i                                      ; BLIT used X, so reload the index
+    lda hit_x                                       ; the alien's x
+    sta ex_arg_x                                    ; the burst goes where it was
+    lda hit_y                                       ; the alien's top row
+    sta ex_arg_y                                    ; the burst's top row
+    lda #EXPL_FRAMES                                ; burst length
+    jsr spawn_explosion                             ; show the burst
+    ldx grid_i                                      ; BLIT and the burst used X, so reload the index
     lda #0                                          ; the alien is no longer alive
     sta grid_alive,x                                ; store the flag
     dec alive_count                                 ; one alien fewer: the bassline speeds up
@@ -1348,6 +1377,18 @@ player_die:                                         ; destroy the ship
     sta bullet_active                               ; mark it gone
 @no_bullet:                                         ; the bullet is cleared
     BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; erase the ship
+    lda player_u                                    ; the ship's x
+    sta ex_arg_x                                    ; the left half of the burst
+    lda #PLAYER_PY                                  ; the ship's top row
+    sta ex_arg_y                                    ; the burst's top row
+    lda #EXPL_DEATH_FRAMES                          ; burst length
+    jsr spawn_explosion                             ; show the left half
+    lda player_u                                    ; the ship's x again
+    clc                                             ; prepare to add
+    adc #4                                          ; the right half is 4 bytes over
+    sta ex_arg_x                                    ; the burst's x
+    lda #EXPL_DEATH_FRAMES                          ; burst length
+    jsr spawn_explosion                             ; show the right half
     lda #1                                          ; the ship is destroyed
     sta player_dead                                 ; mark it
     lda #40                                         ; a long explosion for the ship
@@ -1372,6 +1413,65 @@ dead_frame:                                         ; count down the pause
     jsr draw_player                                 ; draw the ship
 @wait:                                              ; nothing more to do this frame
     rts                                             ; return
+
+; Shows a burst at (ex_arg_x, ex_arg_y) for A frames, in a free slot. If every
+; slot is busy the burst is skipped.
+spawn_explosion:                                    ; start a burst
+    sta ex_arg_t                                    ; the burst's length
+    ldx #0                                          ; start at the first slot
+@find:                                              ; look for a free slot
+    lda ex_t,x                                      ; is this slot in use?
+    beq @free                                       ; no: use it
+    inx                                             ; next slot
+    cpx #EXPL_SLOTS                                 ; past the last slot?
+    bne @find                                       ; no: keep looking
+    rts                                             ; all slots busy: skip the burst
+@free:                                              ; the slot is free
+    lda ex_arg_x                                    ; the burst's x
+    sta ex_x,x                                      ; remember it
+    lda ex_arg_y                                    ; the burst's top row
+    sta ex_y,x                                      ; remember it
+    lda ex_arg_t                                    ; the burst's length
+    sta ex_t,x                                      ; start its countdown
+    BLIT XRAM_EXPL_SPRITE, 4, 8, 4, ex_arg_x, ex_arg_y ; draw it
+    rts                                             ; return
+
+; Counts every burst down one frame and erases those that have finished.
+update_explosions:                                  ; burst countdown
+    lda #0                                          ; start at the first slot
+    sta ex_slot                                     ; store the slot
+@loop:                                              ; one slot per pass
+    ldx ex_slot                                     ; the current slot
+    lda ex_t,x                                      ; is it in use?
+    beq @next                                       ; no: skip it
+    dec ex_t,x                                      ; one frame less
+    bne @next                                       ; not finished: keep showing it
+    lda ex_x,x                                      ; the finished burst's x
+    sta ex_arg_x                                    ; for the erase
+    lda ex_y,x                                      ; its top row
+    sta ex_arg_y                                    ; for the erase
+    BLIT XRAM_BLANK, 4, 8, 0, ex_arg_x, ex_arg_y    ; erase it
+@next:                                              ; next slot
+    inc ex_slot                                     ; advance the slot
+    lda ex_slot                                     ; the slot number
+    cmp #EXPL_SLOTS                                 ; past the last slot?
+    bne @loop                                       ; no: keep going
+    rts                                             ; return
+
+; Ends every burst now, erasing it. Setting each length to 1 lets
+; update_explosions do the erase.
+clear_explosions:                                   ; end all bursts
+    ldx #0                                          ; start at the first slot
+@mark:                                              ; one slot per pass
+    lda ex_t,x                                      ; is it in use?
+    beq @skip                                       ; no
+    lda #1                                          ; one frame left
+    sta ex_t,x                                      ; store it
+@skip:                                              ; next slot
+    inx                                             ; advance
+    cpx #EXPL_SLOTS                                 ; past the last slot?
+    bne @mark                                       ; no: keep going
+    jmp update_explosions                           ; erase the bursts that are now due
 
 ; Shows the number of ships left at the top right of the console.
 draw_lives:                                         ; LIVES n on the first row
@@ -1402,6 +1502,7 @@ enter_title:                                        ; the title screen
     jsr erase_grid                                  ; remove the aliens
     jsr shield_clear_all                            ; remove the bunkers
     jsr snd_silence                                 ; stop the sound
+    jsr clear_explosions                            ; no bursts on the title screen
     BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; remove the ship
     lda #STATE_TITLE                                ; the title screen
     sta game_state                                  ; store the state
@@ -1557,6 +1658,7 @@ new_wave:                                           ; reset the grid for a wave
     sta grid_alive,x                                ; store the flag
     dex                                             ; the previous alien
     bpl @fill                                       ; until index 0 is set
+    jsr clear_explosions                            ; no bursts left from the last wave
     jsr shield_reset                                ; every bunker back to its full shape
     jsr shield_draw_all                             ; draw them
     jmp draw_grid                                   ; draw the new wave
@@ -2100,6 +2202,14 @@ check_ufo:                                          ; the bullet against the sau
     lda #12                                         ; explosion length in frames
     jsr snd_explode                                 ; play the explosion
     jsr erase_ufo                                   ; the saucer is hit
+    lda ufo_x                                       ; the saucer's x
+    clc                                             ; prepare to add
+    adc #2                                          ; center the 4-byte burst on its 8 bytes
+    sta ex_arg_x                                    ; the burst's x
+    lda #UFO_Y                                      ; the saucer's top row
+    sta ex_arg_y                                    ; the burst's top row
+    lda #EXPL_FRAMES                                ; burst length
+    jsr spawn_explosion                             ; show the burst
     lda #0                                          ; no saucer now
     sta ufo_active                                  ; mark it gone
     lda #0                                          ; the bullet is used up
