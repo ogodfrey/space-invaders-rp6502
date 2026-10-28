@@ -62,7 +62,7 @@ OVER_FRAMES          = 180                          ; frames the game-over messa
 ALIEN_STEP_U         = 2                            ; grid move per step (4 px)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
-ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps (tuning)
+ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps at the start of wave 1 (see calc_interval)
 
 .segment "RODATA"                                   ; read-only data goes in ROM
 
@@ -84,6 +84,21 @@ str_name_len = * - str_name                         ; length of the name
 str_press:                                          ; prompt on the title screen
     .byte "PRESS SPACE TO START"                    ; how to begin
 str_press_len = * - str_press                       ; length of the prompt
+str_wave:                                           ; wave counter label
+    .byte "WAVE "                                   ; shown before the wave number
+str_wave_len = * - str_wave                         ; length of the label
+str_pts_squid:                                      ; the point values on the title screen
+    .byte "30 POINTS  SQUID"
+str_pts_squid_len = * - str_pts_squid
+str_pts_crab:
+    .byte "20 POINTS  CRAB"
+str_pts_crab_len = * - str_pts_crab
+str_pts_octo:
+    .byte "10 POINTS  OCTOPUS"
+str_pts_octo_len = * - str_pts_octo
+str_pts_ufo:
+    .byte "? MYSTERY  SAUCER"
+str_pts_ufo_len = * - str_pts_ufo
 
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
@@ -303,6 +318,9 @@ ufo_timer:     .res 1                               ; frames until the saucer's 
 ufo_wait_lo:   .res 1                               ; frames until the next saucer, low byte
 ufo_wait_hi:   .res 1                               ; frames until the next saucer, high byte
 shots_fired:   .res 1                               ; player shots fired, for the saucer's points
+wave:          .res 1                               ; wave number, from 1; speeds the grid up each wave
+grid_iv:       .res 1                               ; the grid's current step interval, in frames
+iv_tmp:        .res 1                               ; scratch for calc_interval
 alive_count:   .res 1                               ; living grid aliens, which sets the bassline tempo
 ps_off:        .res 1                               ; PSG channel byte offset (0, 8, 16, 24) for helpers
 ps_lo:         .res 1                               ; frequency low byte for psg_set_freq
@@ -972,8 +990,10 @@ grid_extent:                                        ; scan the grid for its livi
 ; Moves the grid one step when it is due: erase, shift, toggle frame, redraw.
 update_grid:                                        ; move the alien grid
     inc alien_timer                                 ; count a frame
+    jsr calc_interval                               ; this step's interval: shorter as aliens die and waves go on
+    sta grid_iv                                     ; keep it
     lda alien_timer                                 ; the frame count
-    cmp #ALIEN_STEP_FRAMES                          ; time to move?
+    cmp grid_iv                                     ; has the timer reached the interval?
     bcs @tick                                       ; yes: move it
     rts                                             ; no: wait
 @tick:                                              ; a move is due
@@ -1364,6 +1384,30 @@ enter_title:                                        ; the title screen
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_press, str_press_len                ; print the prompt
+    lda #16                                         ; the point table starts here
+    sta cur_row                                     ; set the row
+    lda #8                                          ; and this column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_pts_squid, str_pts_squid_len        ; the squid is worth 30
+    lda #18                                         ; the next line
+    sta cur_row                                     ; set the row
+    lda #8                                          ; same column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_pts_crab, str_pts_crab_len          ; the crab is worth 20
+    lda #20                                         ; the next line
+    sta cur_row                                     ; set the row
+    lda #8                                          ; same column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_pts_octo, str_pts_octo_len          ; the octopus is worth 10
+    lda #22                                         ; the last line
+    sta cur_row                                     ; set the row
+    lda #8                                          ; same column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_pts_ufo, str_pts_ufo_len            ; the saucer's points vary
     rts                                             ; return
 
 ; On the title screen, a new press of Space starts a game.
@@ -1382,6 +1426,8 @@ title_frame:                                        ; wait for Space
 
 ; Starts a fresh game: three ships, score zero, and the first wave.
 new_game:                                           ; start a game
+    lda #1                                          ; the first wave
+    sta wave                                        ; store the wave number
     lda #LIVES_START                                ; full set of ships
     sta lives                                       ; store it
     lda #0                                          ; zero for the score
@@ -1416,6 +1462,7 @@ new_game:                                           ; start a game
     PUT_STR str_help, str_help_len                  ; print the control hint
     jsr draw_lives                                  ; show the ship count
     jsr draw_player                                 ; draw the ship
+    jsr draw_wave                                   ; show the wave number
     lda #STATE_PLAY                                 ; the game is running
     sta game_state                                  ; store the state
     rts                                             ; return
@@ -1521,10 +1568,50 @@ timed_frame:                                        ; count down a pause
 
 ; Starts the next wave after a cleared wave's pause.
 start_next_wave:                                    ; the next wave
+    inc wave                                        ; the next wave is faster
     jsr new_wave                                    ; put the wave on screen
+    jsr draw_wave                                   ; show the new wave number
     lda #STATE_PLAY                                 ; back to play
     sta game_state                                  ; store the state
     rts                                             ; return
+
+; ---- difficulty ----
+
+; Returns A = frames between grid steps. Starts at 3 + (living aliens / 4), so
+; a full grid steps every 16 frames. Each wave after the first takes 2 frames
+; off, and the interval never drops below 2.
+calc_interval:                                      ; the grid's step interval
+    lda wave                                        ; the wave number
+    sec                                             ; set carry for subtraction
+    sbc #1                                          ; waves completed before this one
+    asl a                                           ; two frames per completed wave
+    sta iv_tmp                                      ; keep the penalty
+    lda alive_count                                 ; the living aliens
+    lsr a                                           ; divide by 4
+    lsr a                                           ; the second halving
+    clc                                             ; prepare to add
+    adc #3                                          ; the base interval
+    sec                                             ; set carry for subtraction
+    sbc iv_tmp                                      ; subtract the wave penalty
+    bcs @ok                                         ; no borrow: the result is valid
+    lda #2                                          ; borrowed past zero: use the minimum
+@ok:                                                ; A is the interval
+    cmp #2                                          ; below the minimum?
+    bcs @done                                       ; no
+    lda #2                                          ; yes: use the minimum
+@done:                                              ; A is the interval
+    rts                                             ; return
+
+; Shows WAVE n at the top right of the console.
+draw_wave:                                          ; WAVE n on the second row
+    lda #1                                          ; row 1
+    sta cur_row                                     ; set the row
+    lda #33                                         ; column 33, under the lives count
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_wave, str_wave_len                  ; print the label
+    lda wave                                        ; the wave number
+    jmp put_dec                                     ; print it and return
 
 ; ---- sound ----
 

@@ -9,3 +9,4 @@ peek game_state 2                                   # the wave is cleared: a pau
 run 125                                             # the 120-frame pause ends
 peek game_state 1                                   # the next wave is playing
 peek grid_alive 1                                   # and the aliens are back
+peek wave 2                                       # the second wave is numbered 2
