@@ -54,6 +54,8 @@ SND_EXPL_LO          = $8C                          ; explosion noise rate: 900 
 SND_EXPL_HI          = $0A                          ; high byte
 SND_UFO_LO           = $DC                          ; saucer tone: 500 Hz (1500 in 1/3 Hz), low byte
 SND_UFO_HI           = $05                          ; high byte
+SND_BOMB_LO          = $94                          ; bomb launch tone: 660 Hz (1980 in 1/3 Hz), low byte
+SND_BOMB_HI          = $07                          ; high byte
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 STATE_TITLE          = 0                            ; title screen: waiting for Space to start
 STATE_PLAY           = 1                            ; playing a wave
@@ -323,6 +325,9 @@ ufo_timer:     .res 1                               ; frames until the saucer's 
 ufo_wait_lo:   .res 1                               ; frames until the next saucer, low byte
 ufo_wait_hi:   .res 1                               ; frames until the next saucer, high byte
 shots_fired:   .res 1                               ; player shots fired, for the saucer's points
+extra_given:   .res 1                               ; 1 once this game's extra ship has been awarded
+bomb_iv:       .res 1                               ; frames between bomb steps this wave
+bomb_snd:      .res 1                               ; frames left in the bomb's launch sound
 hi_lo:         .res 1                               ; best score this session, low byte
 hi_hi:         .res 1                               ; best score this session, high byte
 attract_phase: .res 1                               ; 0 = title screen, 1 = high-score screen
@@ -1119,7 +1124,14 @@ alien_fire:                                         ; maybe launch an alien bomb
     bne @find_slot                                  ; no: keep looking
     rts                                             ; all slots are busy: no new bomb
 @have_slot:                                         ; bomb_slot is free
-    jsr rand_col                                    ; a random column
+    jsr rand                                        ; a random byte decides the aim
+    and #3                                          ; one time in four the bomb aims at the ship
+    beq @aim                                        ; yes
+    jsr rand_col                                    ; otherwise a random column
+    jmp @pick_col                                   ; continue
+@aim:                                               ; aim at the column under the ship
+    jsr player_column                               ; the column nearest the ship
+@pick_col:                                          ; A is the column
     jsr find_bottom                                 ; its lowest living alien, or $FF
     cmp #$FF                                        ; no living alien there?
     bne @spawn                                      ; there is one: fire from it
@@ -1144,6 +1156,17 @@ alien_fire:                                         ; maybe launch an alien bomb
     sta bomb_y,x                                    ; store the bomb's top row
     lda #1                                          ; the slot is in use
     sta bomb_active,x                               ; mark it active
+    lda #6                                          ; the launch sound lasts 6 frames
+    sta bomb_snd                                    ; start its countdown
+    lda #32                                         ; channel 4
+    sta ps_off                                      ; select it
+    lda #SND_BOMB_LO                                ; launch tone, low byte
+    sta ps_lo                                       ; for the write
+    lda #SND_BOMB_HI                                ; high byte
+    sta ps_hi                                       ; for the write
+    jsr psg_set_freq                                ; set the pitch
+    lda #1                                          ; gate on
+    jsr psg_set_gate                                ; start it
     rts                                             ; return
 
 ; Draws the bomb in slot bomb_slot at its position.
@@ -1195,7 +1218,7 @@ bomb_erase:                                         ; erase one alien bomb
 update_bombs:                                       ; move the alien bombs
     inc bomb_timer                                  ; count a frame
     lda bomb_timer                                  ; the frame count
-    cmp #BOMB_STEP_FRAMES                           ; time to move?
+    cmp bomb_iv                                     ; time to move, at this wave's interval?
     bcs @step                                       ; yes
     rts                                             ; no: wait
 @step:                                              ; move the bombs
@@ -1469,6 +1492,7 @@ new_game:                                           ; start a game
     sta fire_timer                                  ; reset the alien fire timer
     sta bomb_timer                                  ; reset the bomb timer
     sta shots_fired                                 ; a new game counts its shots from zero
+    sta extra_given                                 ; no extra ship awarded yet this game
     lda #1                                          ; the first bassline note is due at once
     sta bass_timer                                  ; start the bassline clock
     lda #0                                          ; the bassline starts at its first note
@@ -1511,6 +1535,22 @@ new_wave:                                           ; reset the grid for a wave
     sta alien_timer                                 ; restart the move timer
     lda #GRID_COUNT                                 ; every alien is alive again
     sta alive_count                                 ; store the count
+    lda wave                                        ; the wave number
+    sec                                             ; set carry for subtraction
+    sbc #1                                          ; waves completed before this one
+    sta iv_tmp                                      ; keep it
+    lda #8                                          ; the first wave's bomb interval
+    sec                                             ; set carry for subtraction
+    sbc iv_tmp                                      ; one frame faster each wave
+    bcs @iv_pos                                     ; no borrow: a valid interval
+    lda #3                                          ; borrowed past zero: the minimum
+    jmp @iv_store                                   ; store it
+@iv_pos:                                            ; the interval is positive
+    cmp #3                                          ; below the minimum?
+    bcs @iv_store                                   ; no
+    lda #3                                          ; yes: the minimum
+@iv_store:                                          ; A is the bomb interval
+    sta bomb_iv                                     ; store it
     ldx #GRID_COUNT-1                               ; start at the last alien
 @fill:                                              ; mark every alien alive
     lda #1                                          ; alive
@@ -1555,6 +1595,7 @@ clear_shots:                                        ; remove the bullet, bombs, 
 ; Each frame during play: a cleared grid starts a wave pause, and a grid whose
 ; lowest living alien reaches the ship's row ends the game.
 play_check:                                         ; check for a cleared wave or a landing
+    jsr check_extra_ship                            ; a 1500-point score earns one more ship
     jsr grid_extent                                 ; the living extent, and A = 1 if any alien lives
     bne @some_alive                                 ; some aliens are alive
     lda #STATE_WAVE                                 ; no aliens left: the wave is cleared
@@ -1657,7 +1698,47 @@ draw_hiscore:                                       ; the high-score attract scr
     PUT_STR str_press, str_press_len                ; print the prompt
     rts                                             ; return
 
+; Returns A = the grid column nearest the ship, 0 to GRID_COLS-1.
+player_column:                                      ; the column under the ship
+    lda player_u                                    ; the ship's x
+    clc                                             ; prepare to add
+    adc #4                                          ; its center
+    sec                                             ; set carry for subtraction
+    sbc grid_u                                      ; distance from the grid's left edge
+    bcc @left                                       ; left of the grid: the first column
+    cmp #GRID_COLS*8                                ; past the grid's last column?
+    bcs @right                                      ; yes: the last column
+    lsr a                                           ; eight units per column
+    lsr a                                           ; second halving
+    lsr a                                           ; third halving: the column number
+    rts                                             ; return
+@left:                                              ; left of the grid
+    lda #0                                          ; the first column
+    rts                                             ; return
+@right:                                             ; right of the grid
+    lda #GRID_COLS-1                                ; the last column
+    rts                                             ; return
+
 ; ---- difficulty ----
+
+; Awards one extra ship the first time the score reaches 1500 in a game.
+check_extra_ship:                                   ; the 1500-point ship
+    lda extra_given                                 ; already awarded this game?
+    bne @done                                       ; yes
+    lda score+1                                     ; the score's high byte
+    cmp #5                                          ; below 1280?
+    bcc @done                                       ; yes: not yet
+    bne @award                                      ; above 1280: certainly 1500 or more
+    lda score                                       ; the high byte is 5: check the low byte
+    cmp #$DC                                        ; 1500 is $05DC
+    bcc @done                                       ; below 1500: not yet
+@award:                                             ; the score reached 1500
+    lda #1                                          ; mark it awarded
+    sta extra_given                                 ; store the flag
+    inc lives                                       ; one more ship
+    jmp draw_lives                                  ; show it
+@done:                                              ; nothing to award
+    rts                                             ; return
 
 ; Returns A = frames between grid steps. Starts at 3 + (living aliens / 4), so
 ; a full grid steps every 16 frames. Each wave after the first takes 2 frames
@@ -1723,6 +1804,7 @@ sound_init:                                         ; set up the PSG
     PSG_ENV 1, $02, $00, $48                        ; explosion: noise, release rate 8
     PSG_ENV 2, $02, $20, $12                        ; bassline: square, short release
     PSG_ENV 3, $02, $00, $34                        ; saucer: triangle, release rate 4
+    PSG_ENV 4, $02, $00, $18                        ; alien bomb launch: square, release rate 8
     jmp snd_silence                                 ; no sound yet
 
 ; Writes the frequency in ps_lo and ps_hi to the channel at ps_off.
@@ -1862,6 +1944,15 @@ update_sound:                                       ; sound for one frame
     lda #0                                          ; gate off: release it
     jsr psg_set_gate                                ; write it
 @bass:                                              ; the bassline on channel 2
+    lda bomb_snd                                    ; is the bomb launch sounding?
+    beq @bass_check                                 ; no
+    dec bomb_snd                                    ; one frame of it
+    bne @bass_check                                 ; still going
+    lda #32                                         ; channel 4
+    sta ps_off                                      ; select it
+    lda #0                                          ; gate off
+    jsr psg_set_gate                                ; release it
+@bass_check:                                        ; the bassline checks the ship
     lda player_dead                                 ; is the ship destroyed?
     beq @bass_on                                    ; no: the bassline plays
     lda #16                                         ; channel 2

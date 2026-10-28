@@ -4,11 +4,11 @@ press space                                         # press Space to start a gam
 run 1                                               # one frame to register the press
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
-run 230                                             # 14 grid steps (16 frames each): the grid reaches x = 52
+wait grid_u 52 300                                 # 14 grid steps: the grid reaches x = 52 (waits, so timing drift does not matter)
 peek grid_u 52                                      # the grid is 4 units left of the edge, which it reaches next step
 peek grid_y 40                                      # and has not dropped yet
-run 20                                              # one more step: the edge drops the grid and turns it
+wait grid_y 48 60                                  # the edge drops the grid one row and turns it
 peek grid_y 48                                      # the grid dropped one row (8 px)
 peek alien_dir 254                                  # and now moves left (-2 as $FE)
-run 30                                              # two more steps to the left
+wait grid_u 48 200                                 # two more steps to the left
 peek grid_u 48                                      # the grid is 4 units left of its turning point
