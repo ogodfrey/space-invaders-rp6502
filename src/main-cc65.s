@@ -20,8 +20,7 @@ GRID_ROWS            = 5                            ; rows of aliens in the grid
 GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid
 GRID_PY              = 40                           ; top row of the first alien row, in pixels
 GRID_START_U         = 0                            ; starting grid x, in 2-pixel units
-GRID_MIN_U           = 0                            ; leftmost grid x
-GRID_MAX_U           = 72                           ; rightmost grid x (last column ends at the right edge)
+GRID_SCREEN_U        = 160                          ; screen width in 2-pixel units (320 px)
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 GRID_MAX_Y           = 120                          ; lowest allowed grid top row, so the aliens stay above the ship
 ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
@@ -111,6 +110,8 @@ grid_row_off:                                       ; top row of each grid alien
 player_u:      .res 1                               ; player x, in 2-pixel units
 grid_u:        .res 1                               ; grid x offset, in 2-pixel units
 grid_y:        .res 1                               ; grid top row, in pixels
+grid_ext_min:  .res 1                               ; leftmost living column offset, in 2-pixel units
+grid_ext_max:  .res 1                               ; rightmost living column offset, in 2-pixel units
 alien_dir:     .res 1                               ; grid step per move: +4 or -4 (as $FC)
 alien_frame:   .res 1                               ; 0 or 1: which alien sprite to draw
 alien_timer:   .res 1                               ; frames since the grid last moved
@@ -666,6 +667,45 @@ check_hits:                                         ; bullet vs grid
     lda #0                                          ; no hit
     rts                                             ; return
 
+; Finds the leftmost and rightmost living column offsets. Returns A = 1 if
+; any alien is alive, else 0. Only living aliens set the edges, as in arcade.
+grid_extent:                                        ; scan the grid for its living extent
+    lda #$FF                                        ; sentinel: no living column yet
+    sta grid_ext_min                                ; start the minimum at the sentinel
+    lda #0                                          ; no offset yet
+    sta grid_ext_max                                ; start the maximum at zero
+    lda #0                                          ; start at the first alien
+    sta grid_i                                      ; store the index
+@loop:                                              ; one alien per pass
+    ldx grid_i                                      ; the current alien's index
+    lda grid_alive,x                                ; is it alive?
+    beq @next                                       ; no: it does not set an edge
+    lda grid_col_u,x                                ; this alien's column offset
+    cmp grid_ext_min                                ; left of the current minimum?
+    bcs @not_min                                    ; no: keep the minimum
+    sta grid_ext_min                                ; yes: this is the new minimum
+@not_min:                                           ; check the maximum
+    lda grid_col_u,x                                ; this alien's column offset again
+    cmp grid_ext_max                                ; right of the current maximum?
+    bcc @next                                       ; no: keep the maximum
+    beq @next                                       ; equal: nothing changes
+    sta grid_ext_max                                ; yes: this is the new maximum
+@next:                                              ; move to the next alien
+    inc grid_i                                      ; advance the index
+    lda grid_i                                      ; the index
+    cmp #GRID_COUNT                                 ; past the last alien?
+    beq @done                                       ; yes: the scan is complete
+    jmp @loop                                       ; no: keep scanning
+@done:                                              ; the scan is complete
+    lda grid_ext_min                                ; the minimum, or the sentinel
+    cmp #$FF                                        ; was any living alien found?
+    beq @none                                       ; no
+    lda #1                                          ; yes
+    rts                                             ; return
+@none:                                              ; no living aliens
+    lda #0                                          ; report none
+    rts                                             ; return
+
 ; Moves the grid one step when it is due: erase, shift, toggle frame, redraw.
 update_grid:                                        ; move the alien grid
     inc alien_timer                                 ; count a frame
@@ -676,6 +716,10 @@ update_grid:                                        ; move the alien grid
 @tick:                                              ; a move is due
     lda #0                                          ; restart the timer
     sta alien_timer                                 ; store it
+    jsr grid_extent                                 ; find the living columns
+    bne @alive                                      ; some alien is alive: move the grid
+    rts                                             ; none left: nothing to move
+@alive:                                             ; the grid has living aliens
     jsr erase_grid                                  ; erase the grid at its old position
     lda alien_frame                                 ; current animation frame
     eor #1                                          ; flip between 0 and 1
@@ -684,13 +728,18 @@ update_grid:                                        ; move the alien grid
     cmp #ALIEN_STEP_U                               ; moving right?
     bne @moving_left                                ; no: it is moving left
     lda grid_u                                      ; current grid x
-    cmp #GRID_MAX_U                                 ; at the right edge?
-    bcc @sideways                                   ; no: keep moving sideways
-    jmp @edge                                       ; yes: drop and turn around
+    clc                                             ; prepare to add
+    adc grid_ext_max                                ; the rightmost living column
+    clc                                             ; prepare to add
+    adc #8                                          ; the right edge of that alien
+    cmp #GRID_SCREEN_U                              ; past the right edge?
+    bcs @edge                                       ; yes: drop and turn around
+    jmp @sideways                                   ; no: keep moving sideways
 @moving_left:                                       ; the grid is moving left
     lda grid_u                                      ; current grid x
-    cmp #GRID_MIN_U+1                               ; at or past the left edge (0)?
-    bcs @sideways                                   ; no: keep moving sideways
+    clc                                             ; prepare to add
+    adc grid_ext_min                                ; the leftmost living column
+    bne @sideways                                   ; still on screen: keep moving sideways
 @edge:                                              ; the grid reached a screen edge
     lda grid_y                                      ; current top row
     cmp #GRID_MAX_Y                                 ; already at the lowest allowed row?

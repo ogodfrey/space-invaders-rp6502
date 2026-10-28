@@ -1,0 +1,12 @@
+run 3                                               # let the game start
+poke grid_alive+5 0                                 # kill the right column of the top row
+poke grid_alive+11 0                                # kill the right column, row 2
+poke grid_alive+17 0                                # kill the right column, row 3
+poke grid_alive+23 0                                # kill the right column, row 4
+poke grid_alive+29 0                                # kill the right column, bottom row
+run 1080                                            # 22 steps: the grid reaches x = 84 and moves to 88
+peek grid_u 88                                      # the living edge is column 4, so the grid travels further
+peek alien_dir 4                                    # and it has not turned yet
+run 48                                              # one more step: the edge turns the grid
+peek alien_dir 252                                  # now it moves left
+peek grid_u 88                                      # with no sideways move on the turning step

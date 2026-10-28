@@ -15,6 +15,10 @@ rp6502_test(NAME grid-march COMMAND tests/grid-march.script # emulator test of g
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME grid-edge COMMAND tests/grid-edge.script # the edge uses the living aliens, as in arcade
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME game-start COMMAND tests/game-start.script # emulator test of startup and controls
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
