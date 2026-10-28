@@ -19,6 +19,10 @@ rp6502_test(NAME grid-edge COMMAND tests/grid-edge.script # the edge uses the li
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME bomb-hit COMMAND tests/bomb-hit.script # an alien bomb costs a ship and pauses the game
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME game-start COMMAND tests/game-start.script # emulator test of startup and controls
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )

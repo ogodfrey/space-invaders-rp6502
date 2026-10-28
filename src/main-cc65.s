@@ -21,6 +21,15 @@ GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid
 GRID_PY              = 40                           ; top row of the first alien row, in pixels
 GRID_START_U         = 0                            ; starting grid x, in 2-pixel units
 GRID_SCREEN_U        = 160                          ; screen width in 2-pixel units (320 px)
+BOMB_MAX             = 3                            ; most alien bombs on screen at once, as in arcade
+BOMB_FIRE_FRAMES     = 60                           ; frames between alien fire attempts (tuning)
+BOMB_STEP_FRAMES     = 8                            ; frames between bomb moves (tuning)
+BOMB_STEP_PX         = 8                            ; bomb move per step, in pixels
+BOMB_FLOOR_PY        = 232                          ; a bomb at or below this row has left the screen
+BOMB_OFFSET_U        = 4                            ; bomb x offset from the alien's left edge (center)
+LIVES_START          = 3                            ; ships per game, as in arcade
+DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
+RNG_SEED             = $A5                          ; nonzero start for the random number generator
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 GRID_MAX_Y           = 120                          ; lowest allowed grid top row, so the aliens stay above the ship
 ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
@@ -36,6 +45,12 @@ str_title_len = * - str_title                       ; length of the title text
 str_help:                                           ; control hint text label
     .byte "A/D or arrows move  SPACE fires"         ; control hint shown under the title
 str_help_len = * - str_help                         ; length of the hint text
+str_lives:                                          ; lives label text
+    .byte "LIVES "                                  ; label shown before the count
+str_lives_len = * - str_lives                       ; length of the label
+str_gameover:                                       ; game over text
+    .byte "GAME OVER"                               ; shown when the last ship is lost
+str_gameover_len = * - str_gameover                 ; length of the game over text
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
 
@@ -79,6 +94,7 @@ sprite_rom:                                         ; player, alien A, alien B, 
     .byte $00, $10, $10, $00, $00, $01, $01, $00    ; alien B row 6: legs out
     .byte $10, $00, $10, $00, $00, $00, $00, $10    ; alien B row 7: feet out
     .byte $22, $22, $22, $22, $22, $22, $22, $22    ; bullet: 8 rows of 1 byte, 2 white pixels
+    .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb: zigzag, 8 rows of 1 byte
 
 ; XRAM address of each bitmap row, for the blitter.
 row_lo:                                             ; low byte of each row's address
@@ -135,6 +151,16 @@ hit_x:         .res 1                               ; x of the alien being teste
 hit_y:         .res 1                               ; top row of the alien being tested
 hit_b:         .res 1                               ; bottom row (exclusive) of that alien
 bullet_b:      .res 1                               ; bottom row (exclusive) of the bullet
+lives:         .res 1                               ; ships left
+player_dead:   .res 1                               ; 1 while the ship is destroyed and the game is paused
+death_timer:   .res 1                               ; frames left in the pause after a ship is lost
+fire_timer:    .res 1                               ; frames since the aliens last tried to fire
+bomb_timer:    .res 1                               ; frames since the bombs last moved
+rng:           .res 1                               ; random number generator state
+bomb_slot:     .res 1                               ; index of the bomb being handled
+bomb_active:   .res BOMB_MAX                        ; 1 while each bomb slot is in use
+bomb_u:        .res BOMB_MAX                        ; x of each bomb, in 2-pixel units
+bomb_y:        .res BOMB_MAX                        ; top row of each bomb, in pixels
 bullet_active: .res 1                               ; 1 while a bullet is in flight
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
@@ -206,7 +232,7 @@ _main:                                              ; program entry point
     lda #1                                          ; portal 0 step: advance one byte per access
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
-    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 200      ; copy all sprites into XRAM
+    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 208      ; copy all sprites into XRAM
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address
@@ -274,12 +300,31 @@ _main:                                              ; program entry point
     jsr draw_player                                 ; draw the player
     lda RIA_VSYNC                                   ; read the current VSYNC count
     sta last_vsync                                  ; remember it as the last frame
+    lda #LIVES_START                                ; three ships to start
+    sta lives                                       ; store the ship count
+    lda #0                                          ; nothing destroyed, no timers running
+    sta player_dead                                 ; the ship is not destroyed
+    sta fire_timer                                  ; no alien has fired yet
+    sta bomb_timer                                  ; no bomb has moved yet
+    ldx #BOMB_MAX-1                                 ; start at the last bomb slot
+@clear_bombs:                                       ; mark every bomb slot empty
+    sta bomb_active,x                               ; empty the slot
+    dex                                             ; the previous slot
+    bpl @clear_bombs                                ; until slot 0 is cleared
+    lda #RNG_SEED                                   ; nonzero seed
+    sta rng                                         ; store the generator state
+    jsr draw_lives                                  ; show the ship count
 
 main_loop:                                          ; one pass per video frame
     lda RIA_VSYNC                                   ; read the current VSYNC count
     cmp last_vsync                                  ; has a new frame started?
     beq main_loop                                   ; no: keep waiting
     sta last_vsync                                  ; yes: remember this frame
+    lda player_dead                                 ; is the ship destroyed?
+    beq @live                                       ; no: play normally
+    jsr dead_frame                                  ; count down the pause, then respawn
+    jmp main_loop                                   ; skip the rest of this frame
+@live:                                              ; the ship is alive
 
     lda #HID_KEY_A                                  ; check the A key
     jsr key_held                                    ; is it held?
@@ -313,6 +358,8 @@ main_loop:                                          ; one pass per video frame
     sta prev_space                                  ; remember it for next frame
     jsr update_bullet                               ; move the bullet
     jsr update_grid                                 ; move the alien grid
+    jsr alien_fire                                  ; maybe launch an alien bomb
+    jsr update_bombs                                ; move the alien bombs
     jmp main_loop                                   ; next frame
 
 ; Writes the byte in A to the console when the UART is ready.
@@ -612,6 +659,8 @@ update_bullet:                                      ; move the bullet and check 
     sec                                             ; set carry for subtraction
     sbc #BULLET_STEP_PX                             ; move up one step
     sta bullet_y                                    ; store the new row
+    jsr check_bombs                                 ; did the bullet hit an alien bomb?
+    bne @spent                                      ; yes: the bullet is gone
     jsr check_hits                                  ; did the bullet hit a grid alien?
     bne @spent                                      ; yes: the bullet is gone
     BLIT XRAM_BULLET_SPRITE, 1, 8, 1, bullet_u, bullet_y ; draw it at its new position
@@ -776,3 +825,295 @@ update_grid:                                        ; move the alien grid
     adc alien_dir                                   ; add the step (may be negative)
     sta grid_u                                      ; store the new grid x
     jmp draw_grid                                   ; draw the grid at its new position
+
+; Returns A = a random byte. A 8-bit Galois LFSR with taps $B8.
+rand:                                               ; advance the generator
+    lda rng                                         ; the current state
+    lsr a                                           ; shift out bit 0 into carry
+    bcc @no_tap                                     ; bit 0 was clear: no feedback
+    eor #$B8                                        ; bit 0 was set: apply the taps
+@no_tap:                                            ; the new state is in A
+    sta rng                                         ; store it
+    rts                                             ; return the new value
+
+; Returns A = a random column, 0 to GRID_COLS-1.
+rand_col:                                           ; pick a random grid column
+    jsr rand                                        ; a random byte
+@mod:                                               ; reduce it modulo GRID_COLS
+    cmp #GRID_COLS                                  ; at least GRID_COLS?
+    bcc @done                                       ; no: it is the column
+    sec                                             ; set carry for subtraction
+    sbc #GRID_COLS                                  ; subtract one column count
+    jmp @mod                                        ; check again
+@done:                                              ; A is the column
+    rts                                             ; return
+
+; Given column A, returns A = index of its lowest living alien, or $FF if none.
+find_bottom:                                        ; search one column from the bottom up
+    clc                                             ; prepare to add
+    adc #GRID_COUNT-GRID_COLS                       ; index of this column's bottom row
+    tax                                             ; search from that index
+@try:                                               ; test one alien
+    lda grid_alive,x                                ; is this alien alive?
+    bne @found                                      ; yes: it is the lowest one
+    txa                                             ; the current index
+    sec                                             ; set carry for subtraction
+    sbc #GRID_COLS                                  ; move up one row
+    bcc @none                                       ; past the top: no living alien
+    tax                                             ; search the row above
+    jmp @try                                        ; test it
+@found:                                             ; X is the living alien's index
+    txa                                             ; return it in A
+    rts                                             ; return
+@none:                                              ; the column is empty
+    lda #$FF                                        ; report none
+    rts                                             ; return
+
+; Every fire timer tick, a random column fires from its lowest living alien.
+alien_fire:                                         ; maybe launch an alien bomb
+    inc fire_timer                                  ; count a frame
+    lda fire_timer                                  ; the frame count
+    cmp #BOMB_FIRE_FRAMES                           ; time to fire?
+    bcs @fire                                       ; yes
+    rts                                             ; no: wait
+@fire:                                              ; time to try a shot
+    lda #0                                          ; restart the timer
+    sta fire_timer                                  ; store it
+    lda #0                                          ; start at the first bomb slot
+    sta bomb_slot                                   ; store the slot
+@find_slot:                                         ; look for a free bomb slot
+    ldx bomb_slot                                   ; the current slot
+    lda bomb_active,x                               ; is it free?
+    beq @have_slot                                  ; yes: use it
+    inc bomb_slot                                   ; try the next slot
+    lda bomb_slot                                   ; the slot number
+    cmp #BOMB_MAX                                   ; past the last slot?
+    bne @find_slot                                  ; no: keep looking
+    rts                                             ; all slots are busy: no new bomb
+@have_slot:                                         ; bomb_slot is free
+    jsr rand_col                                    ; a random column
+    jsr find_bottom                                 ; its lowest living alien, or $FF
+    cmp #$FF                                        ; no living alien there?
+    bne @spawn                                      ; there is one: fire from it
+    rts                                             ; no shot this time
+@spawn:                                             ; A = the firing alien's index
+    sta grid_i                                      ; remember the index
+    tax                                             ; use it to index the column table
+    lda grid_col_u,x                                ; the alien's column offset
+    clc                                             ; prepare to add
+    adc grid_u                                      ; add the grid's x
+    clc                                             ; prepare to add
+    adc #BOMB_OFFSET_U                              ; center of the alien
+    ldx bomb_slot                                   ; the slot to fill
+    sta bomb_u,x                                    ; store the bomb's x
+    ldx grid_i                                      ; the firing alien's index
+    lda grid_row_off,x                              ; its row offset
+    clc                                             ; prepare to add
+    adc grid_y                                      ; add the grid's top row
+    clc                                             ; prepare to add
+    adc #8                                          ; the row just below it
+    ldx bomb_slot                                   ; the slot to fill
+    sta bomb_y,x                                    ; store the bomb's top row
+    lda #1                                          ; the slot is in use
+    sta bomb_active,x                               ; mark it active
+    rts                                             ; return
+
+; Draws the bomb in slot bomb_slot at its position.
+bomb_draw:                                          ; draw one alien bomb
+    lda #<XRAM_BOMB_SPRITE                          ; low byte of the bomb sprite
+    sta blit_src                                    ; source low byte
+    lda #>XRAM_BOMB_SPRITE                          ; high byte of the bomb sprite
+    sta blit_src+1                                  ; source high byte
+    lda #1                                          ; 1 byte wide
+    sta blit_w                                      ; store the width
+    lda #8                                          ; 8 rows tall
+    sta blit_h                                      ; store the height
+    lda #1                                          ; sprite rows are 1 byte apart
+    sta blit_stride                                 ; store the stride
+    ldx bomb_slot                                   ; the bomb's slot
+    lda bomb_u,x                                    ; its x
+    sta blit_x                                      ; destination x
+    lda bomb_y,x                                    ; its top row
+    sta blit_y                                      ; destination top row
+    jmp blit                                        ; copy the sprite
+
+; Erases the bomb in slot bomb_slot at its position.
+bomb_erase:                                         ; erase one alien bomb
+    lda #<XRAM_BLANK                                ; low byte of the zero byte
+    sta blit_src                                    ; erasing reads the zero byte
+    lda #>XRAM_BLANK                                ; high byte of the zero byte
+    sta blit_src+1                                  ; store it
+    lda #1                                          ; 1 byte wide
+    sta blit_w                                      ; store the width
+    lda #8                                          ; 8 rows tall
+    sta blit_h                                      ; store the height
+    lda #0                                          ; stride 0 repeats the zero byte
+    sta blit_stride                                 ; store the stride
+    ldx bomb_slot                                   ; the bomb's slot
+    lda bomb_u,x                                    ; its x
+    sta blit_x                                      ; destination x
+    lda bomb_y,x                                    ; its top row
+    sta blit_y                                      ; destination top row
+    jmp blit                                        ; erase the bomb
+
+; Moves every active bomb down one step when due. A bomb that hits the ship
+; destroys it; a bomb past the floor is removed.
+update_bombs:                                       ; move the alien bombs
+    inc bomb_timer                                  ; count a frame
+    lda bomb_timer                                  ; the frame count
+    cmp #BOMB_STEP_FRAMES                           ; time to move?
+    bcs @step                                       ; yes
+    rts                                             ; no: wait
+@step:                                              ; move the bombs
+    lda #0                                          ; restart the timer
+    sta bomb_timer                                  ; store it
+    lda #0                                          ; start at the first slot
+    sta bomb_slot                                   ; store the slot
+@loop:                                              ; one slot per pass
+    ldx bomb_slot                                   ; the current slot
+    lda bomb_active,x                               ; is it in use?
+    bne @active                                     ; yes: move it
+    jmp @next                                       ; no: skip it
+@active:                                            ; the bomb is in flight
+    jsr bomb_erase                                  ; erase it at its old position
+    ldx bomb_slot                                   ; reload the slot (erase used X)
+    lda bomb_y,x                                    ; its top row
+    clc                                             ; prepare to add
+    adc #BOMB_STEP_PX                               ; move it down one step
+    sta bomb_y,x                                    ; store the new row
+    cmp #BOMB_FLOOR_PY                              ; still above the floor?
+    bcc @inside                                     ; yes
+    lda #0                                          ; no: the bomb has left the screen
+    sta bomb_active,x                               ; free the slot
+    jmp @next                                       ; go to the next slot
+@inside:                                            ; the bomb is on screen
+    lda bomb_y,x                                    ; its top row
+    sec                                             ; set carry for subtraction
+    sbc #PLAYER_PY                                  ; distance below the ship's top row
+    clc                                             ; prepare to add
+    adc #7                                          ; the overlap window is -7 to +7 rows
+    cmp #15                                         ; within it?
+    bcs @no_ship                                    ; no: no vertical overlap
+    lda bomb_u,x                                    ; its x
+    cmp player_u                                    ; left of the ship?
+    bcc @no_ship                                    ; yes: missed
+    sec                                             ; set carry for subtraction
+    sbc player_u                                    ; distance from the ship's left edge
+    cmp #8                                          ; within the 8-unit (16 px) width?
+    bcs @no_ship                                    ; no: missed
+    lda #0                                          ; the bomb is used up
+    sta bomb_active,x                               ; free the slot
+    jsr player_die                                  ; the ship is destroyed
+    rts                                             ; stop: player_die cleared the other bombs
+@no_ship:                                           ; the bomb is still flying
+    jsr bomb_draw                                   ; draw it at its new position
+@next:                                              ; move to the next slot
+    inc bomb_slot                                   ; advance the slot
+    lda bomb_slot                                   ; the slot number
+    cmp #BOMB_MAX                                   ; past the last slot?
+    beq @done                                       ; yes
+    jmp @loop                                       ; no: keep going
+@done:                                              ; all slots handled
+    rts                                             ; return
+
+; Player bullet vs alien bombs. Returns A = 1 if the bullet was absorbed.
+; The bullet is destroyed; the bomb survives, as in arcade.
+check_bombs:                                        ; bullet vs bombs
+    lda #0                                          ; start at the first slot
+    sta bomb_slot                                   ; store the slot
+@loop:                                              ; one slot per pass
+    ldx bomb_slot                                   ; the current slot
+    lda bomb_active,x                               ; is it in use?
+    beq @next                                       ; no
+    lda bomb_u,x                                    ; the bomb's x
+    cmp bullet_u                                    ; in the bullet's column?
+    bne @next                                       ; no
+    lda bomb_y,x                                    ; the bomb's top row
+    sec                                             ; set carry for subtraction
+    sbc bullet_y                                    ; distance from the bullet's top row
+    clc                                             ; prepare to add
+    adc #7                                          ; the overlap window is -7 to +7 rows
+    cmp #15                                         ; within it?
+    bcs @next                                       ; no: no overlap
+    lda #0                                          ; the bullet is destroyed
+    sta bullet_active                               ; mark it gone
+    lda #1                                          ; report: absorbed
+    rts                                             ; return
+@next:                                              ; move to the next slot
+    inc bomb_slot                                   ; advance the slot
+    lda bomb_slot                                   ; the slot number
+    cmp #BOMB_MAX                                   ; past the last slot?
+    bne @loop                                       ; no: keep checking
+    lda #0                                          ; no overlap
+    rts                                             ; return
+
+; The ship was hit: lose a life, clear the bombs and the bullet, and pause.
+player_die:                                         ; destroy the ship
+    dec lives                                       ; one ship fewer
+    lda #0                                          ; start at the first slot
+    sta bomb_slot                                   ; store the slot
+@clear:                                             ; clear every bomb on screen
+    ldx bomb_slot                                   ; the current slot
+    lda bomb_active,x                               ; is it in use?
+    beq @skip                                       ; no
+    jsr bomb_erase                                  ; erase it
+    ldx bomb_slot                                   ; reload the slot
+    lda #0                                          ; empty value
+    sta bomb_active,x                               ; free the slot
+@skip:                                              ; next slot
+    inc bomb_slot                                   ; advance the slot
+    lda bomb_slot                                   ; the slot number
+    cmp #BOMB_MAX                                   ; past the last slot?
+    bne @clear                                      ; no: keep clearing
+    lda bullet_active                               ; is a player bullet in flight?
+    beq @no_bullet                                  ; no
+    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase it
+    lda #0                                          ; no bullet now
+    sta bullet_active                               ; mark it gone
+@no_bullet:                                         ; the bullet is cleared
+    BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; erase the ship
+    lda #1                                          ; the ship is destroyed
+    sta player_dead                                 ; mark it
+    lda #DEATH_FRAMES                               ; the pause length
+    sta death_timer                                 ; start the pause
+    jsr draw_lives                                  ; show the new ship count
+    lda lives                                       ; ships left
+    bne @alive                                      ; some are left: continue
+    jsr show_game_over                              ; none left: the game is over
+@alive:                                             ; the pause continues
+    rts                                             ; return
+
+; Called each frame while the ship is destroyed. Respawns it after the pause.
+dead_frame:                                         ; count down the pause
+    dec death_timer                                 ; one frame of the pause
+    bne @wait                                       ; not finished: keep waiting
+    lda lives                                       ; ships left
+    beq @wait                                       ; none: the game is over, stay paused
+    lda #PLAYER_START_U                             ; back to the starting position
+    sta player_u                                    ; store the ship's x
+    lda #0                                          ; the ship is alive again
+    sta player_dead                                 ; clear the flag
+    jsr draw_player                                 ; draw the ship
+@wait:                                              ; nothing more to do this frame
+    rts                                             ; return
+
+; Shows the number of ships left at the top right of the console.
+draw_lives:                                         ; LIVES n on the first row
+    lda #0                                          ; row 0
+    sta cur_row                                     ; set the row
+    lda #33                                         ; column 33, right of the score
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_lives, str_lives_len                ; print the label
+    lda lives                                       ; the ship count
+    jmp put_dec                                     ; print it and return
+
+; Shows GAME OVER in the middle of the screen.
+show_game_over:                                     ; the last ship is lost
+    lda #12                                         ; console row near the middle
+    sta cur_row                                     ; set the row
+    lda #16                                         ; column near the middle
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_gameover, str_gameover_len          ; print the message
+    rts                                             ; return

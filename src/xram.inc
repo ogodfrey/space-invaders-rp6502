@@ -70,6 +70,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     alien_a_sprite .res 64                          ; alien frame A
     alien_b_sprite .res 64                          ; alien frame B
     bullet_sprite  .res 8                           ; bullet, 1 byte by 8 rows
+    bomb_sprite    .res 8                           ; alien bomb, 1 byte by 8 rows
     ; ca65 limits .res to 32767 bytes, so the bitmap is split in two halves
     ; that sit next to each other in XRAM.
     ; 320 * 240 / 4 bytes each. ca65 rejects this as a symbol expression here.
@@ -85,6 +86,7 @@ XRAM_PLAYER_SPRITE  = xram_layout_t::player_sprite  ; XRAM address of the player
 XRAM_ALIEN_A_SPRITE = xram_layout_t::alien_a_sprite ; XRAM address of alien frame A
 XRAM_ALIEN_B_SPRITE = xram_layout_t::alien_b_sprite ; XRAM address of alien frame B
 XRAM_BULLET_SPRITE  = xram_layout_t::bullet_sprite  ; XRAM address of the bullet sprite
+XRAM_BOMB_SPRITE    = xram_layout_t::bomb_sprite    ; XRAM address of the alien bomb sprite
 XRAM_BITMAP         = xram_layout_t::bitmap_top     ; XRAM address of the bitmap
 
 .endif                                              ; end of the include guard
