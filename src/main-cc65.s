@@ -1,6 +1,7 @@
 .export _main
 
 .include "rp6502.inc"
+.include "xram.inc"
 
 .segment "RODATA"
 
