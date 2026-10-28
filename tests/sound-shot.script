@@ -1,0 +1,11 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+press space                                         # fire a shot
+run 1                                               # the shot sound starts
+peek xram:(XRAM_PSG+6) 1                            # channel 0's gate is on
+release space                                       # let go of Space
+run 12                                              # the shot sound lasts 8 frames
+peek xram:(XRAM_PSG+6) 0                            # channel 0 is released

@@ -31,6 +31,10 @@ rp6502_test(NAME ufo-hit COMMAND tests/ufo-hit.script # a bullet hits the bonus 
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME sound-shot COMMAND tests/sound-shot.script # the shot sound gates channel 0 for 8 frames
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME bullet-hit COMMAND tests/bullet-hit.script # a player bullet scores an alien in the bottom row
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )

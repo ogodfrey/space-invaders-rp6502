@@ -77,6 +77,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     bomb_sprite    .res 8                           ; alien bomb, 1 byte by 8 rows
     ufo_sprite     .res 64                          ; bonus saucer, 8 bytes by 8 rows
     shield_block   .res 2                           ; one solid shield cell byte, then padding
+    psg            .res 64                          ; 8 PSG channels, 8 bytes each, in one page
     ; ca65 limits .res to 32767 bytes, so the bitmap is split in two halves
     ; that sit next to each other in XRAM.
     ; 320 * 240 / 4 bytes each. ca65 rejects this as a symbol expression here.
@@ -99,6 +100,11 @@ XRAM_BULLET_SPRITE  = xram_layout_t::bullet_sprite  ; XRAM address of the bullet
 XRAM_BOMB_SPRITE    = xram_layout_t::bomb_sprite    ; XRAM address of the alien bomb sprite
 XRAM_UFO_SPRITE     = xram_layout_t::ufo_sprite     ; XRAM address of the bonus saucer sprite
 XRAM_SHIELD_BLOCK   = xram_layout_t::shield_block   ; XRAM address of the solid shield cell byte
+XRAM_PSG            = xram_layout_t::psg            ; XRAM address of the 8 PSG channels
+
+.macro xreg_ria_psg addr                            ; map the PSG to an XRAM address
+    xreg $0, $1, $00, addr                          ; device 0, channel 1, index 0: PSG
+.endmacro                                           ; end of xreg_ria_psg
 XRAM_BITMAP         = xram_layout_t::bitmap_top     ; XRAM address of the bitmap
 
 .endif                                              ; end of the include guard
