@@ -1,0 +1,8 @@
+run 880                                             # 18 grid steps: the grid reaches the right edge
+peek grid_u 72                                      # grid is at its rightmost x (72)
+peek grid_y 40                                      # and has not dropped yet
+run 60                                              # one more step: the edge turns the grid
+peek grid_y 48                                      # the grid dropped one row (8 px)
+peek alien_dir 252                                  # and now moves left (-4 as $FC)
+run 60                                              # next step moves it sideways
+peek grid_u 68                                      # 4 units left of the edge

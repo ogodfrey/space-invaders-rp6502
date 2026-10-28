@@ -22,6 +22,8 @@ GRID_PY              = 40                           ; top row of the first alien
 GRID_START_U         = 0                            ; starting grid x, in 2-pixel units
 GRID_MIN_U           = 0                            ; leftmost grid x
 GRID_MAX_U           = 72                           ; rightmost grid x (last column ends at the right edge)
+GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
+GRID_MAX_Y           = 120                          ; lowest allowed grid top row, so the aliens stay above the ship
 ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
@@ -89,7 +91,7 @@ row_hi:                                             ; high byte of each row's ad
     .byte >(XRAM_BITMAP + I * (BITMAP_WIDTH_PX / 2)) ; high byte of the same address
 .endrepeat                                          ; end of the row_hi table
 
-; Each grid alien's x offset (in 2-pixel units) and top row (in pixels).
+; Each grid alien's x offset (in 2-pixel units) and top row offset from grid_y (in pixels).
 ; Index = row * GRID_COLS + column, matching grid_alive.
 grid_col_u:                                         ; x offset of each grid alien
 .repeat GRID_ROWS, R                                ; one group of columns per row
@@ -97,10 +99,10 @@ grid_col_u:                                         ; x offset of each grid alie
         .byte C * 16                                ; columns are 32 px apart (16 units)
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
-grid_row_py:                                        ; top row of each grid alien
+grid_row_off:                                       ; top row of each grid alien, from grid_y
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
-        .byte GRID_PY + R * 16                      ; rows are 16 px apart
+        .byte R * 16                                ; rows are 16 px apart
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
 
@@ -108,6 +110,7 @@ grid_row_py:                                        ; top row of each grid alien
 
 player_u:      .res 1                               ; player x, in 2-pixel units
 grid_u:        .res 1                               ; grid x offset, in 2-pixel units
+grid_y:        .res 1                               ; grid top row, in pixels
 alien_dir:     .res 1                               ; grid step per move: +4 or -4 (as $FC)
 alien_frame:   .res 1                               ; 0 or 1: which alien sprite to draw
 alien_timer:   .res 1                               ; frames since the grid last moved
@@ -225,6 +228,8 @@ _main:                                              ; program entry point
     sta player_u                                    ; store the player's x
     lda #GRID_START_U                               ; starting grid x
     sta grid_u                                      ; store the grid's x
+    lda #GRID_PY                                    ; starting top row of the grid
+    sta grid_y                                      ; store the grid's top row
     lda #ALIEN_STEP_U                               ; start moving right (+4)
     sta alien_dir                                   ; store the grid's direction
     lda #0                                          ; first animation frame
@@ -513,7 +518,9 @@ grid_apply:                                         ; blit an 8x8 block at each 
     clc                                             ; prepare to add
     adc grid_col_u,x                                ; add this alien's column offset
     sta blit_x                                      ; destination x
-    lda grid_row_py,x                               ; this alien's top row
+    lda grid_row_off,x                              ; this alien's row offset
+    clc                                             ; prepare to add
+    adc grid_y                                      ; add the grid's top row
     sta blit_y                                      ; destination top row
     jsr blit                                        ; copy the block
 @skip:                                              ; move to the next alien
@@ -612,8 +619,10 @@ check_hits:                                         ; bullet vs grid
     ldx grid_i                                      ; the current alien's index
     lda grid_alive,x                                ; is it alive?
     beq @next                                       ; no: it cannot be hit
-    lda grid_row_py,x                               ; the alien's top row
-    sta hit_y                                       ; remember it
+    lda grid_row_off,x                              ; the alien's row offset
+    clc                                             ; prepare to add
+    adc grid_y                                      ; add the grid's top row
+    sta hit_y                                       ; remember the alien's top row
     clc                                             ; prepare to add
     adc #8                                          ; the alien's bottom row
     sta hit_b                                       ; remember it
@@ -671,18 +680,31 @@ update_grid:                                        ; move the alien grid
     lda alien_frame                                 ; current animation frame
     eor #1                                          ; flip between 0 and 1
     sta alien_frame                                 ; store the new frame
+    lda alien_dir                                   ; which way is the grid moving?
+    cmp #ALIEN_STEP_U                               ; moving right?
+    bne @moving_left                                ; no: it is moving left
     lda grid_u                                      ; current grid x
-    cmp #GRID_MIN_U                                 ; at the left edge?
-    bne @check_max                                  ; no: check the right edge
-    lda #ALIEN_STEP_U                               ; at the left edge: turn right
-    sta alien_dir                                   ; store the direction
-    jmp @step                                       ; then move
-@check_max:                                         ; not at the left edge
     cmp #GRID_MAX_U                                 ; at the right edge?
-    bne @step                                       ; no: keep the direction
-    lda #256-ALIEN_STEP_U                           ; at the right edge: turn left (-4)
-    sta alien_dir                                   ; store the direction
-@step:                                              ; move by the direction
+    bcc @sideways                                   ; no: keep moving sideways
+    jmp @edge                                       ; yes: drop and turn around
+@moving_left:                                       ; the grid is moving left
+    lda grid_u                                      ; current grid x
+    cmp #GRID_MIN_U+1                               ; at or past the left edge (0)?
+    bcs @sideways                                   ; no: keep moving sideways
+@edge:                                              ; the grid reached a screen edge
+    lda grid_y                                      ; current top row
+    cmp #GRID_MAX_Y                                 ; already at the lowest allowed row?
+    bcs @turn                                       ; yes: do not drop further
+    clc                                             ; prepare to add
+    adc #GRID_DROP_PY                               ; drop one row
+    sta grid_y                                      ; store the new top row
+@turn:                                              ; reverse the direction
+    lda #0                                          ; start from zero
+    sec                                             ; set carry for subtraction
+    sbc alien_dir                                   ; negate the step (+4 <-> -4)
+    sta alien_dir                                   ; store the new direction
+    jmp draw_grid                                   ; draw the dropped grid; no sideways move this step
+@sideways:                                          ; move by the direction
     lda grid_u                                      ; current grid x
     clc                                             ; prepare to add
     adc alien_dir                                   ; add the step (may be negative)
