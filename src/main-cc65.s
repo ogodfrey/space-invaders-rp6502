@@ -31,6 +31,8 @@ BOMB_STEP_PX         = 8                            ; bomb move per step, in pix
 BOMB_FLOOR_PY        = 232                          ; a bomb at or below this row has left the screen
 BOMB_OFFSET_U        = 2                            ; bomb x offset from the alien's left edge (center)
 LIVES_START          = 3                            ; ships per game, as in arcade
+ATTRACT_TITLE_FRAMES = 240                          ; frames the title screen stays up before the high score (4 s)
+ATTRACT_SCORE_FRAMES = 120                          ; frames the high-score screen stays up (2 s)
 DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
 SHIELD_COUNT         = 4                            ; bunkers, as in arcade
@@ -99,6 +101,9 @@ str_pts_octo_len = * - str_pts_octo
 str_pts_ufo:
     .byte "? MYSTERY  SAUCER"
 str_pts_ufo_len = * - str_pts_ufo
+str_hiscore:                                        ; label on the high-score screen
+    .byte "HIGH SCORE"
+str_hiscore_len = * - str_hiscore
 
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
@@ -318,6 +323,10 @@ ufo_timer:     .res 1                               ; frames until the saucer's 
 ufo_wait_lo:   .res 1                               ; frames until the next saucer, low byte
 ufo_wait_hi:   .res 1                               ; frames until the next saucer, high byte
 shots_fired:   .res 1                               ; player shots fired, for the saucer's points
+hi_lo:         .res 1                               ; best score this session, low byte
+hi_hi:         .res 1                               ; best score this session, high byte
+attract_phase: .res 1                               ; 0 = title screen, 1 = high-score screen
+attract_timer: .res 1                               ; frames left on the current attract screen
 wave:          .res 1                               ; wave number, from 1; speeds the grid up each wave
 grid_iv:       .res 1                               ; the grid's current step interval, in frames
 iv_tmp:        .res 1                               ; scratch for calc_interval
@@ -486,6 +495,8 @@ _main:                                              ; program entry point
     sta bomb_timer                                  ; no bomb has moved yet
     sta ufo_active                                  ; no saucer yet
     sta shots_fired                                 ; no shots fired yet
+    sta hi_lo                                       ; no best score yet
+    sta hi_hi                                       ; the best score starts at zero
     ldx #BOMB_MAX-1                                 ; start at the last bomb slot
 @clear_bombs:                                       ; mark every bomb slot empty
     sta bomb_active,x                               ; empty the slot
@@ -646,6 +657,7 @@ print_score:                                        ; print the 16-bit score as 
     sta num                                         ; copy it, since subtraction changes it
     lda score+1                                     ; high byte of the score
     sta num+1                                       ; copy it too
+print_num:                                          ; print the 16-bit value in num as decimal
     lda #0                                          ; no digit printed yet
     sta started                                     ; clear the started flag
     ldx #0                                          ; start with the largest place value
@@ -1370,6 +1382,10 @@ enter_title:                                        ; the title screen
     BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; remove the ship
     lda #STATE_TITLE                                ; the title screen
     sta game_state                                  ; store the state
+    lda #0                                          ; the title comes first
+    sta attract_phase                               ; store the phase
+    lda #ATTRACT_TITLE_FRAMES                       ; how long it stays up
+    sta attract_timer                               ; start the countdown
     lda #$0C                                        ; form feed clears the console
     jsr tx_char                                     ; send it
     lda #10                                         ; title row
@@ -1411,7 +1427,20 @@ enter_title:                                        ; the title screen
     rts                                             ; return
 
 ; On the title screen, a new press of Space starts a game.
-title_frame:                                        ; wait for Space
+title_frame:                                        ; the title screen: flip to the high score, then wait for Space
+    dec attract_timer                               ; one frame of this attract screen
+    bne @keys                                       ; still going
+    lda attract_phase                               ; which screen is up?
+    bne @to_title                                   ; the high score: go back to the title
+    lda #1                                          ; the title: show the high score next
+    sta attract_phase                               ; store the phase
+    lda #ATTRACT_SCORE_FRAMES                       ; how long it stays up
+    sta attract_timer                               ; start its countdown
+    jsr draw_hiscore                                ; draw it
+    jmp @keys                                       ; check the keys
+@to_title:                                          ; back to the title
+    jsr enter_title                                 ; draw it, and restart its countdown
+@keys:                                              ; the Space key starts a game on either screen
     lda #HID_KEY_SPACE                              ; the Space key
     jsr key_held                                    ; is it held?
     pha                                             ; keep this frame's state
@@ -1547,6 +1576,7 @@ play_check:                                         ; check for a cleared wave o
 
 ; Ends the game and shows the game-over message for OVER_FRAMES.
 game_over:                                          ; the last ship is lost, or the aliens landed
+    jsr update_hiscore                              ; keep the best score
     lda #STATE_OVER                                 ; the game-over screen
     sta game_state                                  ; store the state
     lda #OVER_FRAMES                                ; how long it stays up
@@ -1573,6 +1603,58 @@ start_next_wave:                                    ; the next wave
     jsr draw_wave                                   ; show the new wave number
     lda #STATE_PLAY                                 ; back to play
     sta game_state                                  ; store the state
+    rts                                             ; return
+
+; ---- high score and attract screen ----
+
+; Keeps the best score: if this game's score beats it, the score becomes the best.
+update_hiscore:                                     ; compare the score with the best
+    lda score+1                                     ; this game's high byte
+    cmp hi_hi                                       ; against the best's high byte
+    bcc @done                                       ; lower: the best stands
+    bne @newhi                                      ; higher: a new best
+    lda score                                       ; equal high bytes: compare the low bytes
+    cmp hi_lo                                       ; against the best's low byte
+    bcc @done                                       ; lower: the best stands
+    beq @done                                       ; equal: the best stands
+@newhi:                                             ; a new best
+    lda score                                       ; the score's low byte
+    sta hi_lo                                       ; becomes the best's low byte
+    lda score+1                                     ; the score's high byte
+    sta hi_hi                                       ; becomes the best's high byte
+@done:                                              ; the best is up to date
+    rts                                             ; return
+
+; Prints the best score as decimal.
+print_hi:                                           ; the best score, at the cursor
+    lda hi_lo                                       ; the best's low byte
+    sta num                                         ; print_num reads the value from num
+    lda hi_hi                                       ; the best's high byte
+    sta num+1                                       ; store it
+    jmp print_num                                   ; print it and return
+
+; Shows the best score in the middle of the screen, with a prompt.
+draw_hiscore:                                       ; the high-score attract screen
+    lda #$0C                                        ; form feed clears the console
+    jsr tx_char                                     ; send it
+    lda #9                                          ; the label's row
+    sta cur_row                                     ; set the row
+    lda #14                                         ; the label's column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_hiscore, str_hiscore_len            ; print the label
+    lda #11                                         ; the score's row
+    sta cur_row                                     ; set the row
+    lda #16                                         ; the score's column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    jsr print_hi                                    ; print the best score
+    lda #13                                         ; the prompt's row
+    sta cur_row                                     ; set the row
+    lda #10                                         ; the prompt's column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_press, str_press_len                ; print the prompt
     rts                                             ; return
 
 ; ---- difficulty ----

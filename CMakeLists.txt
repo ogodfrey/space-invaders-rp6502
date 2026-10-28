@@ -35,6 +35,14 @@ rp6502_test(NAME sound-shot COMMAND tests/sound-shot.script # the shot sound gat
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME attract COMMAND tests/attract.script # the title screen alternates with the high-score screen
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
+rp6502_test(NAME high-score COMMAND tests/high-score.script # a game's score becomes the best if it beats it
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME bullet-hit COMMAND tests/bullet-hit.script # a player bullet scores an alien in the bottom row
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )

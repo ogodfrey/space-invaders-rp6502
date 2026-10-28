@@ -1,0 +1,6 @@
+run 30                                              # let startup finish on the title screen
+peek attract_phase 0                                # the title screen is up
+run 230                                             # 4 seconds on the title screen (240 frames)
+peek attract_phase 1                                # the high-score screen is up
+run 130                                             # 2 seconds on the high-score screen (120 frames)
+peek attract_phase 0                                # the title screen is back

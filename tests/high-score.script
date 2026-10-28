@@ -1,0 +1,11 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke score 210 4                                    # a score of 1234 ($04D2)
+poke grid_y 180                                     # the aliens have landed
+run 3                                               # the landing ends the game
+peek game_state 3                                   # game over
+peek hi_lo 210                                      # the best score's low byte is 1234's
+peek hi_hi 4                                        # and its high byte
