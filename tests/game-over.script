@@ -1,0 +1,10 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke grid_y 180                                     # the grid's lowest row is now at the ship's row
+run 3                                               # the landing check runs
+peek game_state 3                                   # the game is over
+run 190                                             # the game-over message stays up for 180 frames
+peek game_state 0                                   # then the title screen returns

@@ -1,6 +1,10 @@
-run 3                                               # let the game start
-expect console "SPACE INVADERS"                    # title is printed
-expect console "A/D or arrows move"                 # control hint is printed
+run 30                                              # let startup finish on the title screen
+expect console "SPACE INVADERS"                     # the title is printed
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+expect console "A/D or arrows move"                 # the control hint is printed for the game
 peek player_u 72                                    # ship starts at x = 72 (144 px)
 press right                                         # hold the right arrow
 run 1                                               # one frame: one step

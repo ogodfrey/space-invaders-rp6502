@@ -1,4 +1,8 @@
-run 3                                               # let the game start
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
 poke grid_alive+5 0                                 # kill the right column of the top row
 poke grid_alive+11 0                                # kill the right column, row 2
 poke grid_alive+17 0                                # kill the right column, row 3

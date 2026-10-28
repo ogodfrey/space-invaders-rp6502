@@ -1,4 +1,8 @@
-run 30                                              # let startup finish (the bitmap clear takes several frames)
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
 poke bomb_active 1                                  # put a bomb in slot 0
 poke bomb_u 72                                      # directly above the ship (ship x = 72)
 poke bomb_y 184                                     # two steps above the ship's top row (200)

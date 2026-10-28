@@ -31,7 +31,12 @@ LIVES_START          = 3                            ; ships per game, as in arca
 DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
-GRID_MAX_Y           = 120                          ; lowest allowed grid top row, so the aliens stay above the ship
+STATE_TITLE          = 0                            ; title screen: waiting for Space to start
+STATE_PLAY           = 1                            ; playing a wave
+STATE_WAVE           = 2                            ; a wave is cleared: pause, then the next wave
+STATE_OVER           = 3                            ; game over: show the message, then the title
+WAVE_PAUSE_FRAMES    = 120                          ; frames between waves
+OVER_FRAMES          = 180                          ; frames the game-over message stays up
 ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
@@ -51,6 +56,13 @@ str_lives_len = * - str_lives                       ; length of the label
 str_gameover:                                       ; game over text
     .byte "GAME OVER"                               ; shown when the last ship is lost
 str_gameover_len = * - str_gameover                 ; length of the game over text
+str_name:                                           ; the game's name on the title screen
+    .byte "SPACE INVADERS"                          ; title text
+str_name_len = * - str_name                         ; length of the name
+str_press:                                          ; prompt on the title screen
+    .byte "PRESS SPACE TO START"                    ; how to begin
+str_press_len = * - str_press                       ; length of the prompt
+
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
 
@@ -140,6 +152,9 @@ grid_u:        .res 1                               ; grid x offset, in 2-pixel 
 grid_y:        .res 1                               ; grid top row, in pixels
 grid_ext_min:  .res 1                               ; leftmost living column offset, in 2-pixel units
 grid_ext_max:  .res 1                               ; rightmost living column offset, in 2-pixel units
+grid_ext_low:  .res 1                               ; lowest living row offset, in pixels from grid_y
+game_state:    .res 1                               ; STATE_TITLE, STATE_PLAY, STATE_WAVE, or STATE_OVER
+state_timer:   .res 1                               ; frames left in a timed screen
 alien_dir:     .res 1                               ; grid step per move: +4 or -4 (as $FC)
 alien_frame:   .res 1                               ; 0 or 1: which alien sprite to draw
 alien_timer:   .res 1                               ; frames since the grid last moved
@@ -314,12 +329,24 @@ _main:                                              ; program entry point
     lda #RNG_SEED                                   ; nonzero seed
     sta rng                                         ; store the generator state
     jsr draw_lives                                  ; show the ship count
+    jsr enter_title                                 ; start on the title screen
 
 main_loop:                                          ; one pass per video frame
     lda RIA_VSYNC                                   ; read the current VSYNC count
     cmp last_vsync                                  ; has a new frame started?
     beq main_loop                                   ; no: keep waiting
     sta last_vsync                                  ; yes: remember this frame
+    lda game_state                                  ; which screen is showing?
+    cmp #STATE_PLAY                                 ; the game?
+    beq @play                                       ; yes: run it
+    cmp #STATE_TITLE                                ; the title screen?
+    bne @timed                                      ; no: a timed pause
+    jsr title_frame                                 ; wait for Space to start
+    jmp main_loop                                   ; next frame
+@timed:                                             ; a wave-clear or game-over pause
+    jsr timed_frame                                 ; count it down
+    jmp main_loop                                   ; next frame
+@play:                                              ; the game is running
     lda player_dead                                 ; is the ship destroyed?
     beq @live                                       ; no: play normally
     jsr dead_frame                                  ; count down the pause, then respawn
@@ -360,6 +387,7 @@ main_loop:                                          ; one pass per video frame
     jsr update_grid                                 ; move the alien grid
     jsr alien_fire                                  ; maybe launch an alien bomb
     jsr update_bombs                                ; move the alien bombs
+    jsr play_check                                  ; a cleared wave or a landed grid ends the wave
     jmp main_loop                                   ; next frame
 
 ; Writes the byte in A to the console when the UART is ready.
@@ -740,12 +768,19 @@ grid_extent:                                        ; scan the grid for its livi
     sta grid_ext_min                                ; start the minimum at the sentinel
     lda #0                                          ; no offset yet
     sta grid_ext_max                                ; start the maximum at zero
+    sta grid_ext_low                                ; start the lowest row at zero
     lda #0                                          ; start at the first alien
     sta grid_i                                      ; store the index
 @loop:                                              ; one alien per pass
     ldx grid_i                                      ; the current alien's index
     lda grid_alive,x                                ; is it alive?
     beq @next                                       ; no: it does not set an edge
+    lda grid_row_off,x                              ; this alien's row offset
+    cmp grid_ext_low                                ; lower than the current lowest?
+    bcc @not_low                                    ; no: keep it
+    beq @not_low                                    ; equal: keep it
+    sta grid_ext_low                                ; yes: it is the new lowest
+@not_low:                                           ; check the columns
     lda grid_col_u,x                                ; this alien's column offset
     cmp grid_ext_min                                ; left of the current minimum?
     bcs @not_min                                    ; no: keep the minimum
@@ -808,8 +843,6 @@ update_grid:                                        ; move the alien grid
     bne @sideways                                   ; still on screen: keep moving sideways
 @edge:                                              ; the grid reached a screen edge
     lda grid_y                                      ; current top row
-    cmp #GRID_MAX_Y                                 ; already at the lowest allowed row?
-    bcs @turn                                       ; yes: do not drop further
     clc                                             ; prepare to add
     adc #GRID_DROP_PY                               ; drop one row
     sta grid_y                                      ; store the new top row
@@ -1077,18 +1110,16 @@ player_die:                                         ; destroy the ship
     lda #DEATH_FRAMES                               ; the pause length
     sta death_timer                                 ; start the pause
     jsr draw_lives                                  ; show the new ship count
-    lda lives                                       ; ships left
-    bne @alive                                      ; some are left: continue
-    jsr show_game_over                              ; none left: the game is over
-@alive:                                             ; the pause continues
-    rts                                             ; return
+    rts                                             ; the pause runs until dead_frame ends it
 
 ; Called each frame while the ship is destroyed. Respawns it after the pause.
 dead_frame:                                         ; count down the pause
     dec death_timer                                 ; one frame of the pause
     bne @wait                                       ; not finished: keep waiting
     lda lives                                       ; ships left
-    beq @wait                                       ; none: the game is over, stay paused
+    bne @respawn                                    ; some are left: respawn
+    jmp game_over                                   ; none left: the game is over
+@respawn:                                           ; a ship is left
     lda #PLAYER_START_U                             ; back to the starting position
     sta player_u                                    ; store the ship's x
     lda #0                                          ; the ship is alive again
@@ -1116,4 +1147,168 @@ show_game_over:                                     ; the last ship is lost
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_gameover, str_gameover_len          ; print the message
+    rts                                             ; return
+
+; ---- game states ----
+
+; Shows the title screen and clears the playfield.
+enter_title:                                        ; the title screen
+    jsr clear_shots                                 ; remove the bullet and bombs
+    jsr erase_grid                                  ; remove the aliens
+    BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; remove the ship
+    lda #STATE_TITLE                                ; the title screen
+    sta game_state                                  ; store the state
+    lda #$0C                                        ; form feed clears the console
+    jsr tx_char                                     ; send it
+    lda #10                                         ; title row
+    sta cur_row                                     ; set the row
+    lda #14                                         ; title column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_name, str_name_len                  ; print the game name
+    lda #13                                         ; prompt row
+    sta cur_row                                     ; set the row
+    lda #10                                         ; prompt column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_press, str_press_len                ; print the prompt
+    rts                                             ; return
+
+; On the title screen, a new press of Space starts a game.
+title_frame:                                        ; wait for Space
+    lda #HID_KEY_SPACE                              ; the Space key
+    jsr key_held                                    ; is it held?
+    pha                                             ; keep this frame's state
+    beq @no_start                                   ; not held: do not start
+    lda prev_space                                  ; was it held last frame?
+    bne @no_start                                   ; yes: not a new press
+    jsr new_game                                    ; a new press starts the game
+@no_start:                                          ; remember the state for next frame
+    pla                                             ; restore this frame's state
+    sta prev_space                                  ; store it
+    rts                                             ; return
+
+; Starts a fresh game: three ships, score zero, and the first wave.
+new_game:                                           ; start a game
+    lda #LIVES_START                                ; full set of ships
+    sta lives                                       ; store it
+    lda #0                                          ; zero for the score
+    sta score                                       ; clear the low byte
+    sta score+1                                     ; clear the high byte
+    lda #PLAYER_START_U                             ; starting x
+    sta player_u                                    ; store it
+    lda #0                                          ; no pause
+    sta player_dead                                 ; the ship is alive
+    sta fire_timer                                  ; reset the alien fire timer
+    sta bomb_timer                                  ; reset the bomb timer
+    jsr new_wave                                    ; put the first wave on screen
+    lda #$0C                                        ; form feed clears the title
+    jsr tx_char                                     ; send it
+    jsr draw_score                                  ; the title and score
+    lda #1                                          ; second row
+    sta cur_row                                     ; set the row
+    lda #0                                          ; first column
+    sta cur_col                                     ; set the column
+    jsr goto_xy                                     ; move the cursor there
+    PUT_STR str_help, str_help_len                  ; print the control hint
+    jsr draw_lives                                  ; show the ship count
+    jsr draw_player                                 ; draw the ship
+    lda #STATE_PLAY                                 ; the game is running
+    sta game_state                                  ; store the state
+    rts                                             ; return
+
+; Puts a full grid at its starting place. Clears shots and erases what was there.
+new_wave:                                           ; reset the grid for a wave
+    jsr clear_shots                                 ; remove any bullet and bombs
+    jsr erase_grid                                  ; remove what is left of the old wave
+    lda #GRID_START_U                               ; starting x
+    sta grid_u                                      ; store it
+    lda #GRID_PY                                    ; starting top row
+    sta grid_y                                      ; store it
+    lda #ALIEN_STEP_U                               ; start moving right
+    sta alien_dir                                   ; store the direction
+    lda #0                                          ; first animation frame
+    sta alien_frame                                 ; store the frame
+    sta alien_timer                                 ; restart the move timer
+    ldx #GRID_COUNT-1                               ; start at the last alien
+@fill:                                              ; mark every alien alive
+    lda #1                                          ; alive
+    sta grid_alive,x                                ; store the flag
+    dex                                             ; the previous alien
+    bpl @fill                                       ; until index 0 is set
+    jmp draw_grid                                   ; draw the new wave
+
+; Erases the bullet and every bomb, and empties their slots.
+clear_shots:                                        ; remove the bullet and bombs
+    lda bullet_active                               ; is a bullet in flight?
+    beq @no_bullet                                  ; no
+    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase it
+    lda #0                                          ; no bullet now
+    sta bullet_active                               ; mark it gone
+@no_bullet:                                         ; the bullet is cleared
+    lda #0                                          ; start at the first bomb slot
+    sta bomb_slot                                   ; store the slot
+@loop:                                              ; one slot per pass
+    ldx bomb_slot                                   ; the current slot
+    lda bomb_active,x                               ; is it in use?
+    beq @next                                       ; no
+    jsr bomb_erase                                  ; erase the bomb
+    ldx bomb_slot                                   ; reload the slot
+    lda #0                                          ; empty value
+    sta bomb_active,x                               ; free the slot
+@next:                                              ; next slot
+    inc bomb_slot                                   ; advance the slot
+    lda bomb_slot                                   ; the slot number
+    cmp #BOMB_MAX                                   ; past the last slot?
+    bne @loop                                       ; no: keep going
+    rts                                             ; return
+
+; Each frame during play: a cleared grid starts a wave pause, and a grid whose
+; lowest living alien reaches the ship's row ends the game.
+play_check:                                         ; check for a cleared wave or a landing
+    jsr grid_extent                                 ; the living extent, and A = 1 if any alien lives
+    bne @some_alive                                 ; some aliens are alive
+    lda #STATE_WAVE                                 ; no aliens left: the wave is cleared
+    sta game_state                                  ; store the state
+    lda #WAVE_PAUSE_FRAMES                          ; the pause length
+    sta state_timer                                 ; start it
+    rts                                             ; return
+@some_alive:                                        ; aliens remain
+    lda grid_y                                      ; the grid's top row
+    clc                                             ; prepare to add
+    adc grid_ext_low                                ; the lowest living alien's row offset
+    bcs @landed                                     ; past 255: certainly below the ship
+    cmp #PLAYER_PY-8                                ; reached the ship's row?
+    bcc @ok                                         ; no: still above it
+@landed:                                            ; the aliens reached the ship
+    jmp game_over                                   ; the game is over
+@ok:                                                ; nothing has landed
+    rts                                             ; return
+
+; Ends the game and shows the game-over message for OVER_FRAMES.
+game_over:                                          ; the last ship is lost, or the aliens landed
+    lda #STATE_OVER                                 ; the game-over screen
+    sta game_state                                  ; store the state
+    lda #OVER_FRAMES                                ; how long it stays up
+    sta state_timer                                 ; start the countdown
+    jmp show_game_over                              ; print the message
+
+; Counts down the wave pause or the game-over screen.
+timed_frame:                                        ; count down a pause
+    dec state_timer                                 ; one frame
+    bne @wait                                       ; not done yet
+    lda game_state                                  ; which pause?
+    cmp #STATE_OVER                                 ; the game-over screen?
+    beq @to_title                                   ; yes: back to the title
+    jmp start_next_wave                             ; no: a wave is clear
+@to_title:                                          ; return to the title screen
+    jmp enter_title
+@wait:                                              ; keep waiting
+    rts                                             ; return
+
+; Starts the next wave after a cleared wave's pause.
+start_next_wave:                                    ; the next wave
+    jsr new_wave                                    ; put the wave on screen
+    lda #STATE_PLAY                                 ; back to play
+    sta game_state                                  ; store the state
     rts                                             ; return

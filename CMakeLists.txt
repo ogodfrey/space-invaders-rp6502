@@ -23,6 +23,14 @@ rp6502_test(NAME bomb-hit COMMAND tests/bomb-hit.script # an alien bomb costs a 
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME game-over COMMAND tests/game-over.script # the aliens landing ends the game, then the title returns
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
+rp6502_test(NAME wave-clear COMMAND tests/wave-clear.script # clearing a wave starts the next one
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME game-start COMMAND tests/game-start.script # emulator test of startup and controls
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
