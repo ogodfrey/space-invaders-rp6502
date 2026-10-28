@@ -11,5 +11,5 @@ press space                                         # press Space to fire
 run 2                                               # let the bullet start
 peek bullet_active 1                                # a bullet is in flight
 release space                                       # let go of Space
-wait score 1 120                                    # wait for the bullet to hit the alien
-expect console "SCORE: 1"                           # the hit raised the score
+wait score 10 120                                    # wait for the bullet to hit the alien
+expect console "SCORE: 10"                          # the hit raised the score

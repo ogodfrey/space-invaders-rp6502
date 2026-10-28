@@ -104,6 +104,18 @@ grid_row_off:                                       ; top row of each grid alien
         .byte R * 16                                ; rows are 16 px apart
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
+grid_points:                                        ; points for each alien, by row, as in arcade
+.repeat GRID_ROWS, R                                ; one group of columns per row
+    .repeat GRID_COLS, C                            ; one entry per column
+        .if R = 0                                   ; top row
+            .byte 30                                ; the top row is worth 30 points
+        .elseif R < 3                               ; the two middle rows
+            .byte 20                                ; the middle rows are worth 20 points
+        .else                                       ; the bottom two rows
+            .byte 10                                ; the bottom rows are worth 10 points
+        .endif                                      ; end of the row test
+    .endrepeat                                      ; end of the columns
+.endrepeat                                          ; end of the rows
 
 .segment "BSS"                                      ; zero-initialized RAM for variables
 
@@ -619,7 +631,9 @@ check_hits:                                         ; bullet vs grid
 @loop:                                              ; one alien per pass
     ldx grid_i                                      ; the current alien's index
     lda grid_alive,x                                ; is it alive?
-    beq @next                                       ; no: it cannot be hit
+    bne @check                                      ; alive: test it
+    jmp @next                                       ; dead: it cannot be hit
+@check:                                             ; the alien is alive
     lda grid_row_off,x                              ; the alien's row offset
     clc                                             ; prepare to add
     adc grid_y                                      ; add the grid's top row
@@ -648,8 +662,11 @@ check_hits:                                         ; bullet vs grid
     ldx grid_i                                      ; BLIT used X, so reload the index
     lda #0                                          ; the alien is no longer alive
     sta grid_alive,x                                ; store the flag
-    inc score                                       ; add one to the score
-    bne @score_done                                 ; no carry out of the low byte: done
+    lda grid_points,x                               ; points for this alien's row
+    clc                                             ; prepare to add
+    adc score                                       ; add to the score's low byte
+    sta score                                       ; store the low byte
+    bcc @score_done                                 ; no carry out of the low byte: done
     inc score+1                                     ; carry into the high byte
 @score_done:                                        ; score is updated
     jsr draw_score                                  ; redraw the score
