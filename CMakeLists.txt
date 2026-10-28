@@ -58,3 +58,7 @@ rp6502_test(NAME wave-clear COMMAND tests/wave-clear.script # clearing a wave st
 rp6502_test(NAME game-start COMMAND tests/game-start.script # emulator test of startup and controls
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
+
+rp6502_test(NAME extra-ship COMMAND tests/extra-ship.script # reaching 1500 points awards one extra ship
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)

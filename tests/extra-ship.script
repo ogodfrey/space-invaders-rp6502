@@ -1,0 +1,13 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+peek lives 3                                        # three ships to start
+poke score 220 5                                    # a score of 1500 ($05DC)
+run 2                                               # one frame for the check to run
+peek lives 4                                        # the 1500-point ship is awarded
+peek extra_given 1                                  # and marked as awarded
+poke score 0 0                                      # clear the score; no further award
+run 2                                               # let the check run again
+peek lives 4                                        # still four: the award happens once per game
