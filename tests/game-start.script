@@ -5,15 +5,12 @@ run 1                                               # one frame to register the 
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
 expect console "A/D or arrows move"                 # the control hint is printed for the game
-peek player_u 72                                    # ship starts at x = 72 (144 px)
+peek player_u 76                                    # ship starts at the center of the field (x = 76)
 press right                                         # hold the right arrow
 run 1                                               # one frame: one step
-peek player_u 74                                    # ship moved 2 units (4 px)
+peek player_u 78                                    # ship moved 2 units (4 px)
 release right                                       # let go of the arrow
-poke player_u 64                                    # line the ship up under grid column 4
 press space                                         # press Space to fire
 run 2                                               # let the bullet start
 peek bullet_active 1                                # a bullet is in flight
 release space                                       # let go of Space
-wait score 10 120                                    # wait for the bullet to hit the alien
-expect console "SCORE: 10"                          # the hit raised the score

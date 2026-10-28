@@ -4,7 +4,7 @@ run 1                                               # one frame to register the 
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
 poke bomb_active 1                                  # put a bomb in slot 0
-poke bomb_u 72                                      # directly above the ship (ship x = 72)
+poke bomb_u 76                                      # directly above the ship (ship x = 76)
 poke bomb_y 184                                     # two steps above the ship's top row (200)
 run 20                                              # two bomb steps: the bomb hits the ship
 peek lives 2                                        # one ship was lost
@@ -14,4 +14,4 @@ run 110                                             # still inside the 120-frame
 peek player_dead 1                                  # still paused
 run 20                                              # the pause ends
 peek player_dead 0                                  # the ship is back
-peek player_u 72                                    # at its starting position
+peek player_u 76                                    # at its starting position

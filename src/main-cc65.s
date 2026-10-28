@@ -12,21 +12,24 @@ CANVAS_320X240       = 1                            ; VGA canvas selector for 32
 ; Horizontal positions are in units of 2 pixels: a sprite byte holds two
 ; 4-bit pixels, so sprites move in whole bytes.
 PLAYER_PY            = 200                          ; player sprite top row, in pixels
-PLAYER_START_U       = 72                           ; player start x, in 2-pixel units
-PLAYER_MIN_U         = 0                            ; leftmost player x
-PLAYER_MAX_U         = 152                          ; rightmost player x (320 px - 16 px sprite)
-GRID_COLS            = 6                            ; aliens per row in the grid
-GRID_ROWS            = 5                            ; rows of aliens in the grid
-GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid
+PLAYER_START_U       = 76                           ; player start x, in 2-pixel units (center of the field)
+PLAYER_MIN_U         = 24                           ; leftmost player x (field left edge)
+PLAYER_MAX_U         = 128                          ; rightmost player x (field right edge minus 16 px)
+FIELD_LEFT_U         = 24                           ; left edge of the 224-px arcade field, in 2-pixel units
+FIELD_RIGHT_U        = 136                          ; right edge of the field (24 + 112 units)
+ALIEN_W_BYTES        = 4                            ; alien width in bytes (8 px at 4 bits per pixel)
+GRID_COLS            = 11                           ; aliens per row in the grid, as in arcade
+GRID_ROWS            = 5                            ; rows of aliens in the grid, as in arcade
+GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid (55)
 GRID_PY              = 40                           ; top row of the first alien row, in pixels
-GRID_START_U         = 0                            ; starting grid x, in 2-pixel units
-GRID_SCREEN_U        = 160                          ; screen width in 2-pixel units (320 px)
+GRID_START_U         = FIELD_LEFT_U                 ; starting grid x, in 2-pixel units
+
 BOMB_MAX             = 3                            ; most alien bombs on screen at once, as in arcade
 BOMB_FIRE_FRAMES     = 60                           ; frames between alien fire attempts (tuning)
 BOMB_STEP_FRAMES     = 8                            ; frames between bomb moves (tuning)
 BOMB_STEP_PX         = 8                            ; bomb move per step, in pixels
 BOMB_FLOOR_PY        = 232                          ; a bomb at or below this row has left the screen
-BOMB_OFFSET_U        = 4                            ; bomb x offset from the alien's left edge (center)
+BOMB_OFFSET_U        = 2                            ; bomb x offset from the alien's left edge (center)
 LIVES_START          = 3                            ; ships per game, as in arcade
 DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
@@ -37,10 +40,10 @@ STATE_WAVE           = 2                            ; a wave is cleared: pause, 
 STATE_OVER           = 3                            ; game over: show the message, then the title
 WAVE_PAUSE_FRAMES    = 120                          ; frames between waves
 OVER_FRAMES          = 180                          ; frames the game-over message stays up
-ALIEN_STEP_U         = 4                            ; grid move per step (8 px)
+ALIEN_STEP_U         = 2                            ; grid move per step (4 px)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
-ALIEN_STEP_FRAMES    = 48                           ; frames between alien steps
+ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps (tuning)
 
 .segment "RODATA"                                   ; read-only data goes in ROM
 
@@ -78,9 +81,10 @@ bitmap_config_rom:                                  ; Mode 3 config, 14 bytes, a
     .word BITMAP_WIDTH_PX, BITMAP_HEIGHT_PX         ; bitmap size in pixels
     .word XRAM_BITMAP, XRAM_PALETTE                 ; bitmap and palette addresses in XRAM
 
-; Sprites are 8 bytes (16 pixels) by 8 rows, and the bullet is 1 byte wide.
-; The order matches xram_layout_t, since they are uploaded as one block.
-sprite_rom:                                         ; player, alien A, alien B, bullet
+; Sprites: the player (16x8), then squid, crab, and octopus A/B frames (8x8 each),
+; then the bullet and bomb (1 byte wide). The order matches xram_layout_t.
+; Uploaded in two parts, since one loop index covers only 256 bytes.
+sprite_rom:                                         ; all sprite data in XRAM order
     .byte $00, $00, $00, $01, $10, $00, $00, $00    ; player row 0: cannon tip
     .byte $00, $00, $00, $11, $11, $00, $00, $00    ; player row 1
     .byte $00, $00, $00, $11, $11, $00, $00, $00    ; player row 2
@@ -89,22 +93,54 @@ sprite_rom:                                         ; player, alien A, alien B, 
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 5
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 6
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 7
-    .byte $00, $00, $01, $10, $01, $10, $00, $00    ; alien A row 0: antennae
-    .byte $00, $00, $11, $11, $11, $11, $00, $00    ; alien A row 1
-    .byte $00, $01, $11, $11, $11, $11, $10, $00    ; alien A row 2
-    .byte $00, $11, $01, $11, $11, $01, $10, $00    ; alien A row 3: eyes
-    .byte $00, $11, $11, $11, $11, $11, $10, $00    ; alien A row 4
-    .byte $00, $00, $10, $01, $10, $01, $00, $00    ; alien A row 5: legs in
-    .byte $00, $01, $00, $01, $10, $00, $10, $00    ; alien A row 6: legs in
-    .byte $00, $10, $00, $00, $00, $00, $01, $00    ; alien A row 7: feet in
-    .byte $00, $00, $01, $10, $01, $10, $00, $00    ; alien B row 0: antennae
-    .byte $00, $00, $11, $11, $11, $11, $00, $00    ; alien B row 1
-    .byte $00, $01, $11, $11, $11, $11, $10, $00    ; alien B row 2
-    .byte $00, $11, $01, $11, $11, $01, $10, $00    ; alien B row 3: eyes
-    .byte $00, $11, $11, $11, $11, $11, $10, $00    ; alien B row 4
-    .byte $00, $01, $00, $01, $10, $00, $10, $00    ; alien B row 5: legs out
-    .byte $00, $10, $10, $00, $00, $01, $01, $00    ; alien B row 6: legs out
-    .byte $10, $00, $10, $00, $00, $00, $00, $10    ; alien B row 7: feet out
+    .byte $00, $01, $10, $00                        ; squid A row 0: antennae
+    .byte $00, $11, $11, $00                        ; squid A row 1
+    .byte $01, $11, $11, $10                        ; squid A row 2
+    .byte $11, $01, $10, $11                        ; squid A row 3: eyes
+    .byte $11, $11, $11, $11                        ; squid A row 4
+    .byte $00, $10, $01, $00                        ; squid A row 5: legs in
+    .byte $01, $01, $10, $10                        ; squid A row 6: legs in
+    .byte $10, $10, $01, $01                        ; squid A row 7: feet in
+    .byte $00, $01, $10, $00                        ; squid B row 0: antennae
+    .byte $00, $11, $11, $00                        ; squid B row 1
+    .byte $01, $11, $11, $10                        ; squid B row 2
+    .byte $11, $01, $10, $11                        ; squid B row 3: eyes
+    .byte $11, $11, $11, $11                        ; squid B row 4
+    .byte $00, $10, $01, $00                        ; squid B row 5: legs out
+    .byte $01, $00, $00, $10                        ; squid B row 6: legs out
+    .byte $00, $10, $01, $00                        ; squid B row 7: feet out
+    .byte $00, $10, $01, $00                        ; crab A row 0: antennae
+    .byte $10, $11, $11, $01                        ; crab A row 1
+    .byte $11, $11, $11, $11                        ; crab A row 2
+    .byte $11, $01, $10, $11                        ; crab A row 3: eyes
+    .byte $11, $11, $11, $11                        ; crab A row 4
+    .byte $00, $10, $01, $00                        ; crab A row 5: legs in
+    .byte $01, $00, $00, $10                        ; crab A row 6: legs in
+    .byte $10, $00, $00, $01                        ; crab A row 7: feet in
+    .byte $00, $10, $01, $00                        ; crab B row 0: antennae
+    .byte $10, $11, $11, $01                        ; crab B row 1
+    .byte $11, $11, $11, $11                        ; crab B row 2
+    .byte $11, $01, $10, $11                        ; crab B row 3: eyes
+    .byte $11, $11, $11, $11                        ; crab B row 4
+    .byte $01, $01, $10, $10                        ; crab B row 5: legs out
+    .byte $10, $10, $01, $01                        ; crab B row 6: legs out
+    .byte $00, $10, $01, $00                        ; crab B row 7: feet out
+    .byte $00, $11, $11, $00                        ; octopus A row 0: head
+    .byte $01, $11, $11, $10                        ; octopus A row 1
+    .byte $11, $11, $11, $11                        ; octopus A row 2
+    .byte $11, $00, $00, $11                        ; octopus A row 3: eyes gap
+    .byte $11, $11, $11, $11                        ; octopus A row 4
+    .byte $00, $11, $11, $00                        ; octopus A row 5
+    .byte $01, $00, $00, $10                        ; octopus A row 6: legs in
+    .byte $10, $00, $00, $01                        ; octopus A row 7: feet in
+    .byte $00, $11, $11, $00                        ; octopus B row 0: head
+    .byte $01, $11, $11, $10                        ; octopus B row 1
+    .byte $11, $11, $11, $11                        ; octopus B row 2
+    .byte $11, $00, $00, $11                        ; octopus B row 3: eyes gap
+    .byte $11, $11, $11, $11                        ; octopus B row 4
+    .byte $00, $11, $11, $00                        ; octopus B row 5
+    .byte $10, $00, $00, $01                        ; octopus B row 6: legs out
+    .byte $01, $00, $00, $10                        ; octopus B row 7: feet out
     .byte $22, $22, $22, $22, $22, $22, $22, $22    ; bullet: 8 rows of 1 byte, 2 white pixels
     .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb: zigzag, 8 rows of 1 byte
 
@@ -123,7 +159,7 @@ row_hi:                                             ; high byte of each row's ad
 grid_col_u:                                         ; x offset of each grid alien
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
-        .byte C * 16                                ; columns are 32 px apart (16 units)
+        .byte C * 8                                 ; columns are 16 px apart (8 bytes), as in arcade
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
 grid_row_off:                                       ; top row of each grid alien, from grid_y
@@ -132,6 +168,22 @@ grid_row_off:                                       ; top row of each grid alien
         .byte R * 16                                ; rows are 16 px apart
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
+grid_type2:                                         ; sprite type of each grid alien, times 2 (squid, crab, octopus)
+.repeat GRID_ROWS, R                                ; one group of columns per row
+    .repeat GRID_COLS, C                            ; one entry per column
+        .if R = 0                                   ; top row: squid
+            .byte 0                                 ; squid sprites start at type 0
+        .elseif R < 3                               ; middle rows: crab
+            .byte 2                                 ; crab sprites start at type 2
+        .else                                       ; bottom rows: octopus
+            .byte 4                                 ; octopus sprites start at type 4
+        .endif                                      ; end of the row test
+    .endrepeat                                      ; end of the columns
+.endrepeat                                          ; end of the rows
+alien_src_lo:                                       ; low byte of each alien sprite address
+    .byte <XRAM_SQUID_A, <XRAM_SQUID_B, <XRAM_CRAB_A, <XRAM_CRAB_B, <XRAM_OCTO_A, <XRAM_OCTO_B
+alien_src_hi:                                       ; high byte of each alien sprite address
+    .byte >XRAM_SQUID_A, >XRAM_SQUID_B, >XRAM_CRAB_A, >XRAM_CRAB_B, >XRAM_OCTO_A, >XRAM_OCTO_B
 grid_points:                                        ; points for each alien, by row, as in arcade
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
@@ -160,8 +212,7 @@ alien_frame:   .res 1                               ; 0 or 1: which alien sprite
 alien_timer:   .res 1                               ; frames since the grid last moved
 grid_alive:    .res GRID_COUNT                      ; 1 while each grid alien is on screen
 grid_i:        .res 1                               ; index of the grid alien being handled
-grid_src:      .res 2                               ; XRAM address of the sprite for grid draws
-grid_stride:   .res 1                               ; source advance per row for grid draws
+grid_erase:    .res 1                               ; 1 while grid_apply is erasing, 0 while drawing
 hit_x:         .res 1                               ; x of the alien being tested for a hit
 hit_y:         .res 1                               ; top row of the alien being tested
 hit_b:         .res 1                               ; bottom row (exclusive) of that alien
@@ -247,7 +298,8 @@ _main:                                              ; program entry point
     lda #1                                          ; portal 0 step: advance one byte per access
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
-    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 208      ; copy all sprites into XRAM
+    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 192      ; copy the player and squid and crab sprites
+    UPLOAD XRAM_OCTO_A, sprite_rom+192, 80          ; copy the octopus, bullet, and bomb sprites
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address
@@ -562,46 +614,48 @@ blit:                                               ; copy a block from XRAM to 
     rts                                             ; return
 
 draw_grid:                                          ; draw every living grid alien in the current frame
-    lda #<XRAM_ALIEN_A_SPRITE                       ; low byte of frame A's address
-    sta grid_src                                    ; store it as the source
-    lda #>XRAM_ALIEN_A_SPRITE                       ; high byte of frame A's address
-    sta grid_src+1                                  ; store it
-    lda alien_frame                                 ; which frame is showing?
-    beq @stride                                     ; frame 0: keep frame A
-    lda #<XRAM_ALIEN_B_SPRITE                       ; low byte of frame B's address
-    sta grid_src                                    ; store it as the source
-    lda #>XRAM_ALIEN_B_SPRITE                       ; high byte of frame B's address
-    sta grid_src+1                                  ; store it
-@stride:                                            ; sprite rows are 8 bytes apart
-    lda #8                                          ; sprite row stride in bytes
-    sta grid_stride                                 ; store it
+    lda #0                                          ; not erasing
+    sta grid_erase                                  ; store the mode
     jmp grid_apply                                  ; blit every living alien
 
 erase_grid:                                         ; erase every living grid alien
-    lda #<XRAM_BLANK                                ; low byte of the zero byte's address
-    sta grid_src                                    ; erasing reads the zero byte
-    lda #>XRAM_BLANK                                ; high byte of its address
-    sta grid_src+1                                  ; store it
-    lda #0                                          ; stride 0 repeats the zero byte
-    sta grid_stride                                 ; store it
+    lda #1                                          ; erasing
+    sta grid_erase                                  ; store the mode
     jmp grid_apply                                  ; blit over every living alien
 
-grid_apply:                                         ; blit an 8x8 block at each living alien
+grid_apply:                                         ; blit an 8-row block at each living alien
     lda #0                                          ; start at the first alien
     sta grid_i                                      ; store the index
 @loop:                                              ; one alien per pass
     ldx grid_i                                      ; the current alien's index
     lda grid_alive,x                                ; is this alien alive?
     beq @skip                                       ; no: nothing to draw
-    lda grid_src                                    ; source low byte
+    lda grid_erase                                  ; are we erasing?
+    bne @blank                                      ; yes: use the zero byte
+    lda grid_type2,x                                ; this row's sprite type (2 per type)
+    clc                                             ; prepare to add
+    adc alien_frame                                 ; add the animation frame
+    tay                                             ; index the sprite address tables with it
+    lda alien_src_lo,y                              ; low byte of the sprite address
     sta blit_src                                    ; hand it to the blitter
-    lda grid_src+1                                  ; source high byte
+    lda alien_src_hi,y                              ; high byte of the sprite address
     sta blit_src+1                                  ; hand it to the blitter
-    lda grid_stride                                 ; source stride
-    sta blit_stride                                 ; hand it to the blitter
-    lda #8                                          ; 8 bytes wide (16 px)
+    lda #ALIEN_W_BYTES                              ; sprite rows are one alien wide apart
+    sta blit_stride                                 ; advance one alien width per row
+    jmp @go                                         ; common setup
+@blank:                                             ; erase: read the zero byte every row
+    lda #<XRAM_BLANK                                ; low byte of the zero byte
+    sta blit_src                                    ; erasing reads it
+    lda #>XRAM_BLANK                                ; high byte of the zero byte
+    sta blit_src+1                                  ; store it
+    lda #0                                          ; stride 0 repeats the zero byte
+    sta blit_stride                                 ; store it
+@go:                                                ; common blit setup
+    lda #ALIEN_W_BYTES                              ; 4 bytes wide (8 px)
     sta blit_w                                      ; hand it to the blitter
-    sta blit_h                                      ; 8 rows tall
+    lda #8                                          ; 8 rows tall
+    sta blit_h                                      ; hand it to the blitter
+    ldx grid_i                                      ; reload the index (the code above used Y)
     lda grid_u                                      ; the grid's x offset
     clc                                             ; prepare to add
     adc grid_col_u,x                                ; add this alien's column offset
@@ -733,9 +787,9 @@ check_hits:                                         ; bullet vs grid
     bcc @next                                       ; yes: a miss
     sec                                             ; set carry for subtraction
     sbc hit_x                                       ; distance from the alien's left edge
-    cmp #8                                          ; within the 8-unit (16 px) width?
+    cmp #ALIEN_W_BYTES                              ; within the alien's width?
     bcs @next                                       ; no: a miss
-    BLIT XRAM_BLANK, 8, 8, 0, hit_x, hit_y          ; erase the alien: it is hit
+    BLIT XRAM_BLANK, ALIEN_W_BYTES, 8, 0, hit_x, hit_y ; erase the alien: it is hit
     ldx grid_i                                      ; BLIT used X, so reload the index
     lda #0                                          ; the alien is no longer alive
     sta grid_alive,x                                ; store the flag
@@ -832,15 +886,16 @@ update_grid:                                        ; move the alien grid
     clc                                             ; prepare to add
     adc grid_ext_max                                ; the rightmost living column
     clc                                             ; prepare to add
-    adc #8                                          ; the right edge of that alien
-    cmp #GRID_SCREEN_U                              ; past the right edge?
+    adc #ALIEN_W_BYTES                              ; the right edge of that alien
+    cmp #FIELD_RIGHT_U                              ; past the right edge of the field?
     bcs @edge                                       ; yes: drop and turn around
     jmp @sideways                                   ; no: keep moving sideways
 @moving_left:                                       ; the grid is moving left
     lda grid_u                                      ; current grid x
     clc                                             ; prepare to add
     adc grid_ext_min                                ; the leftmost living column
-    bne @sideways                                   ; still on screen: keep moving sideways
+    cmp #FIELD_LEFT_U+1                             ; still right of the field's left edge?
+    bcs @sideways                                   ; yes: keep moving sideways
 @edge:                                              ; the grid reached a screen edge
     lda grid_y                                      ; current top row
     clc                                             ; prepare to add

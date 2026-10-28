@@ -3,7 +3,7 @@ press space                                         # press Space to start a gam
 run 1                                               # one frame to register the press
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
-poke grid_alive 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 # kill every alien
+poke grid_alive 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 # kill every alien
 run 2                                               # the wave check runs
 peek game_state 2                                   # the wave is cleared: a pause
 run 125                                             # the 120-frame pause ends

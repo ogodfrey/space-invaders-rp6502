@@ -3,14 +3,16 @@ press space                                         # press Space to start a gam
 run 1                                               # one frame to register the press
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
-poke grid_alive+5 0                                 # kill the right column of the top row
-poke grid_alive+11 0                                # kill the right column, row 2
-poke grid_alive+17 0                                # kill the right column, row 3
-poke grid_alive+23 0                                # kill the right column, row 4
-poke grid_alive+29 0                                # kill the right column, bottom row
-run 1080                                            # 22 steps: the grid reaches x = 84 and moves to 88
-peek grid_u 88                                      # the living edge is column 4, so the grid travels further
-peek alien_dir 4                                    # and it has not turned yet
-run 48                                              # one more step: the edge turns the grid
-peek alien_dir 252                                  # now it moves left
-peek grid_u 88                                      # with no sideways move on the turning step
+poke grid_alive+10 0                                # kill the right column of the top row
+poke grid_alive+21 0                                # kill the right column, row 2
+poke grid_alive+32 0                                # kill the right column, row 3
+poke grid_alive+43 0                                # kill the right column, row 4
+poke grid_alive+54 0                                # kill the right column, bottom row
+run 296                                             # 18 grid steps: the grid reaches x = 60
+peek grid_u 60                                      # the living edge is column 9, so the grid travels further
+peek alien_dir 2                                    # moving right, one step of 2 units
+run 20                                              # one more step: the edge turns the grid
+peek alien_dir 254                                  # now it moves left (-2 as $FE)
+peek grid_u 60                                      # with no sideways move on the turning step
+run 40                                              # three more steps to the left
+peek grid_u 54                                      # the grid is 6 units left of its turning point

@@ -67,8 +67,12 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     bitmap_config  .tag mode3_config_t              ; Mode 3 config, 14 bytes
     blank          .res 2                           ; zero bytes, used to erase sprites
     player_sprite  .res 64                          ; player sprite, 8 bytes by 8 rows
-    alien_a_sprite .res 64                          ; alien frame A
-    alien_b_sprite .res 64                          ; alien frame B
+    squid_a        .res 32                          ; squid frame A, 4 bytes by 8 rows
+    squid_b        .res 32                          ; squid frame B
+    crab_a         .res 32                          ; crab frame A
+    crab_b         .res 32                          ; crab frame B
+    octo_a         .res 32                          ; octopus frame A
+    octo_b         .res 32                          ; octopus frame B
     bullet_sprite  .res 8                           ; bullet, 1 byte by 8 rows
     bomb_sprite    .res 8                           ; alien bomb, 1 byte by 8 rows
     ; ca65 limits .res to 32767 bytes, so the bitmap is split in two halves
@@ -83,8 +87,12 @@ XRAM_PALETTE        = xram_layout_t::palette        ; XRAM address of the palett
 XRAM_BITMAP_CONFIG  = xram_layout_t::bitmap_config  ; XRAM address of the Mode 3 config
 XRAM_BLANK          = xram_layout_t::blank          ; XRAM address of the zero bytes
 XRAM_PLAYER_SPRITE  = xram_layout_t::player_sprite  ; XRAM address of the player sprite
-XRAM_ALIEN_A_SPRITE = xram_layout_t::alien_a_sprite ; XRAM address of alien frame A
-XRAM_ALIEN_B_SPRITE = xram_layout_t::alien_b_sprite ; XRAM address of alien frame B
+XRAM_SQUID_A        = xram_layout_t::squid_a        ; XRAM address of squid frame A
+XRAM_SQUID_B        = xram_layout_t::squid_b        ; XRAM address of squid frame B
+XRAM_CRAB_A         = xram_layout_t::crab_a         ; XRAM address of crab frame A
+XRAM_CRAB_B         = xram_layout_t::crab_b         ; XRAM address of crab frame B
+XRAM_OCTO_A         = xram_layout_t::octo_a         ; XRAM address of octopus frame A
+XRAM_OCTO_B         = xram_layout_t::octo_b         ; XRAM address of octopus frame B
 XRAM_BULLET_SPRITE  = xram_layout_t::bullet_sprite  ; XRAM address of the bullet sprite
 XRAM_BOMB_SPRITE    = xram_layout_t::bomb_sprite    ; XRAM address of the alien bomb sprite
 XRAM_BITMAP         = xram_layout_t::bitmap_top     ; XRAM address of the bitmap

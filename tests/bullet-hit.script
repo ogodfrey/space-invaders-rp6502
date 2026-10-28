@@ -1,0 +1,13 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run; the grid is still at x = 24
+poke alien_timer 0                                  # the grid will not move for 16 frames
+poke bullet_timer 3                                 # the bullet moves on the next frame
+poke bullet_y 112                                   # just below the bottom row of aliens (rows 104-111)
+poke bullet_u 65                                    # inside column 5 (x = 64 to 67)
+poke bullet_active 1                                # the bullet is in flight
+run 2                                               # the bullet moves up and hits the bottom row
+peek grid_alive+49 0                                # alien 49 (bottom row, column 5) is gone
+peek score 10                                       # a bottom-row alien is worth 10 points
