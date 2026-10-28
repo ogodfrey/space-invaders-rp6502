@@ -1,0 +1,14 @@
+run 3                                               # let the game start
+expect console "SPACE INVADERS"                    # title is printed
+expect console "A/D or arrows move"                 # control hint is printed
+peek player_u 72                                    # ship starts at x = 72 (144 px)
+press right                                         # hold the right arrow
+run 1                                               # one frame: one step
+peek player_u 74                                    # ship moved 2 units (4 px)
+release right                                       # let go of the arrow
+press space                                         # press Space to fire
+run 2                                               # let the bullet start
+peek bullet_active 1                                # a bullet is in flight
+release space                                       # let go of Space
+wait score 1 120                                    # wait for the bullet to hit the alien
+expect console "SCORE: 1"                           # the hit raised the score
