@@ -39,6 +39,11 @@ SHIELD_ROWS          = 4                            ; cells down one bunker (4 p
 SHIELD_CELLS         = SHIELD_COLS * SHIELD_ROWS    ; cells per bunker (44)
 SHIELD_PY            = 168                          ; top row of the shields, in pixels
 SHIELD_CELL_H        = 4                            ; height of one shield cell, in pixels
+UFO_Y                = 24                           ; top row of the saucer, above the aliens
+UFO_STEP_U           = 2                            ; saucer move per step, in 2-pixel units (4 px)
+UFO_STEP_FRAMES      = 3                            ; frames between saucer steps (tuning)
+UFO_RIGHT_U          = 152                          ; the saucer leaves the screen past this x
+UFO_BASE_FRAMES      = 900                          ; shortest wait before the next saucer (15 s at 60 Hz)
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 STATE_TITLE          = 0                            ; title screen: waiting for Space to start
 STATE_PLAY           = 1                            ; playing a wave
@@ -90,11 +95,21 @@ shield_template:                                    ; the full shape of one bunk
     .byte 1,1,1,0,0,0,0,0,1,1,1                     ; row 2: arch opening
     .byte 1,1,0,0,0,0,0,0,0,1,1                     ; row 3: arch opening
 
+; Points for the bonus saucer. The value is picked by the number of shots fired
+; (mod 16) when the saucer is hit. Low and high bytes, 16 entries.
+ufo_pts_lo:
+    .byte $64, $32, $32, $64, $96, $64, $64, $32    ; 100 50 50 100 150 100 100 50
+    .byte $2C, $64, $64, $64, $32, $96, $64, $32    ; 300 100 100 100 50 150 100 50
+ufo_pts_hi:
+    .byte 0, 0, 0, 0, 0, 0, 0, 0                    ; 300 needs the high byte
+    .byte 1, 0, 0, 0, 0, 0, 0, 0
+
 palette_rom:                                        ; 16 colors, 2 bytes each, for the bitmap
     COLOR_FROM_RGBA 0, 0, 0, 255            ; 0: black
     COLOR_FROM_RGBA 0, 255, 0, 255          ; 1: green
     COLOR_FROM_RGBA 255, 255, 255, 255      ; 2: white
-    .res 26, 0                              ; unused palette entries are transparent black
+    COLOR_FROM_RGBA 255, 0, 0, 255          ; 3: red, for the bonus saucer
+    .res 24, 0                              ; unused palette entries are transparent black
 
 bitmap_config_rom:                                  ; Mode 3 config, 14 bytes, as the VGA docs lay it out
     .byte 0, 0                                      ; x_wrap and y_wrap off
@@ -164,6 +179,14 @@ sprite_rom:                                         ; all sprite data in XRAM or
     .byte $01, $00, $00, $10                        ; octopus B row 7: feet out
     .byte $22, $22, $22, $22, $22, $22, $22, $22    ; bullet: 8 rows of 1 byte, 2 white pixels
     .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb: zigzag, 8 rows of 1 byte
+    .byte $00, $00, $33, $33, $33, $33, $00, $00    ; UFO row 0: dome
+    .byte $00, $33, $33, $33, $33, $33, $33, $00    ; UFO row 1
+    .byte $03, $33, $32, $33, $33, $33, $23, $30    ; UFO row 2: windows
+    .byte $13, $33, $33, $33, $33, $33, $33, $31    ; UFO row 3: body
+    .byte $00, $33, $30, $00, $00, $00, $33, $30    ; UFO row 4: legs
+    .byte $00, $03, $30, $00, $00, $00, $03, $30    ; UFO row 5
+    .byte $00, $00, $00, $00, $00, $00, $00, $00    ; UFO row 6: blank
+    .byte $00, $00, $00, $00, $00, $00, $00, $00    ; UFO row 7: blank
 
 ; XRAM address of each bitmap row, for the blitter.
 row_lo:                                             ; low byte of each row's address
@@ -259,6 +282,13 @@ rect_x:        .res 1                               ; x of the rectangle a shiel
 rect_y:        .res 1                               ; top row of that rectangle
 rect_w:        .res 1                               ; its width in 2-pixel units
 rect_h:        .res 1                               ; its height in pixels
+ufo_active:    .res 1                               ; 1 while the saucer is crossing the screen
+ufo_x:         .res 1                               ; saucer x, in 2-pixel units
+ufo_dir:       .res 1                               ; saucer step: +2 (right) or $FE (left)
+ufo_timer:     .res 1                               ; frames until the saucer's next step
+ufo_wait_lo:   .res 1                               ; frames until the next saucer, low byte
+ufo_wait_hi:   .res 1                               ; frames until the next saucer, high byte
+shots_fired:   .res 1                               ; player shots fired, for the saucer's points
 bullet_active: .res 1                               ; 1 while a bullet is in flight
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
@@ -331,7 +361,7 @@ _main:                                              ; program entry point
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
     UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 192      ; copy the player and squid and crab sprites
-    UPLOAD XRAM_OCTO_A, sprite_rom+192, 80          ; copy the octopus, bullet, and bomb sprites
+    UPLOAD XRAM_OCTO_A, sprite_rom+192, 144         ; copy the octopus, bullet, bomb, and saucer sprites
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address
@@ -411,6 +441,8 @@ _main:                                              ; program entry point
     sta player_dead                                 ; the ship is not destroyed
     sta fire_timer                                  ; no alien has fired yet
     sta bomb_timer                                  ; no bomb has moved yet
+    sta ufo_active                                  ; no saucer yet
+    sta shots_fired                                 ; no shots fired yet
     ldx #BOMB_MAX-1                                 ; start at the last bomb slot
 @clear_bombs:                                       ; mark every bomb slot empty
     sta bomb_active,x                               ; empty the slot
@@ -477,6 +509,7 @@ main_loop:                                          ; one pass per video frame
     jsr update_grid                                 ; move the alien grid
     jsr alien_fire                                  ; maybe launch an alien bomb
     jsr update_bombs                                ; move the alien bombs
+    jsr update_ufo                                  ; move the bonus saucer
     jsr play_check                                  ; a cleared wave or a landed grid ends the wave
     jmp main_loop                                   ; next frame
 
@@ -752,6 +785,7 @@ fire_bullet:                                        ; start a bullet at the ship
     sta bullet_timer                                ; reset the bullet timer
     lda #1                                          ; the bullet is now in flight
     sta bullet_active                               ; set the active flag
+    inc shots_fired                                 ; count the shot for the saucer's points
     BLIT XRAM_BULLET_SPRITE, 1, 8, 1, bullet_u, bullet_y ; draw the bullet
     rts                                             ; return
 
@@ -783,6 +817,8 @@ update_bullet:                                      ; move the bullet and check 
     jsr check_bombs                                 ; did the bullet hit an alien bomb?
     bne @spent                                      ; yes: the bullet is gone
     jsr check_shields                               ; did the bullet hit a shield cell?
+    bne @spent                                      ; yes: the bullet is gone
+    jsr check_ufo                                   ; did the bullet hit the saucer?
     bne @spent                                      ; yes: the bullet is gone
     jsr check_hits                                  ; did the bullet hit a grid alien?
     bne @spent                                      ; yes: the bullet is gone
@@ -1323,6 +1359,11 @@ new_game:                                           ; start a game
     sta player_dead                                 ; the ship is alive
     sta fire_timer                                  ; reset the alien fire timer
     sta bomb_timer                                  ; reset the bomb timer
+    sta shots_fired                                 ; a new game counts its shots from zero
+    sta ufo_active                                  ; no saucer at the start
+    lda #(256-UFO_STEP_U)                           ; the first saucer goes left, so the first flips it right
+    sta ufo_dir                                     ; store the direction
+    jsr ufo_schedule                                ; start the countdown to the first saucer
     jsr new_wave                                    ; put the first wave on screen
     lda #$0C                                        ; form feed clears the title
     jsr tx_char                                     ; send it
@@ -1363,7 +1404,13 @@ new_wave:                                           ; reset the grid for a wave
     jmp draw_grid                                   ; draw the new wave
 
 ; Erases the bullet and every bomb, and empties their slots.
-clear_shots:                                        ; remove the bullet and bombs
+clear_shots:                                        ; remove the bullet, bombs, and saucer
+    lda ufo_active                                  ; is a saucer on screen?
+    beq @no_ufo                                     ; no
+    jsr erase_ufo                                   ; erase it
+    lda #0                                          ; no saucer now
+    sta ufo_active                                  ; mark it gone
+@no_ufo:                                            ; the saucer is cleared
     lda bullet_active                               ; is a bullet in flight?
     beq @no_bullet                                  ; no
     jsr erase_bullet                                ; erase it and repair the shields under it
@@ -1435,6 +1482,137 @@ start_next_wave:                                    ; the next wave
     jsr new_wave                                    ; put the wave on screen
     lda #STATE_PLAY                                 ; back to play
     sta game_state                                  ; store the state
+    rts                                             ; return
+
+; ---- bonus saucer ----
+
+; Starts the countdown to the next saucer: UFO_BASE_FRAMES plus 0 to 510 frames.
+ufo_schedule:                                       ; wait for the next saucer
+    jsr rand                                        ; a random byte
+    asl a                                           ; double it: 0 to 510
+    sta ufo_wait_lo                                 ; the low byte of the random part
+    lda #0                                          ; the high byte starts at zero
+    rol a                                           ; take the carry from the doubling
+    sta ufo_wait_hi                                 ; the high byte of the random part
+    lda ufo_wait_lo                                 ; add the base wait, low byte first
+    clc                                             ; prepare to add
+    adc #<UFO_BASE_FRAMES                           ; low byte of 900
+    sta ufo_wait_lo                                 ; store it
+    lda ufo_wait_hi                                 ; high byte
+    adc #>UFO_BASE_FRAMES                           ; add the base wait's high byte, with carry
+    sta ufo_wait_hi                                 ; store it
+    rts                                             ; return
+
+; Counts down to the next saucer, then moves the saucer across the top.
+update_ufo:                                         ; the bonus saucer
+    lda ufo_active                                  ; is one crossing the screen?
+    bne @moving                                     ; yes
+    lda ufo_wait_lo                                 ; the countdown's low byte
+    bne @count_lo                                   ; not zero: count it down
+    lda ufo_wait_hi                                 ; the high byte
+    beq @appear                                     ; both zero: time for a saucer
+    dec ufo_wait_hi                                 ; borrow from the high byte
+@count_lo:                                          ; one frame less to wait
+    dec ufo_wait_lo                                 ; count the low byte down
+    rts                                             ; return
+@appear:                                            ; the countdown is over
+    jmp ufo_spawn                                   ; start a saucer crossing
+@moving:                                            ; a saucer is crossing
+    dec ufo_timer                                   ; one frame of its step timer
+    beq @step                                       ; the timer ran out: take a step
+    rts                                             ; wait
+@step:                                              ; move the saucer one step
+    lda #UFO_STEP_FRAMES                            ; restart the step timer
+    sta ufo_timer                                   ; store it
+    jsr erase_ufo                                   ; erase it at its old position
+    lda ufo_dir                                     ; which way is it going?
+    cmp #UFO_STEP_U                                 ; right?
+    bne @left                                       ; no
+    lda ufo_x                                       ; its x
+    cmp #UFO_RIGHT_U                                ; past the right side?
+    bcs @gone                                       ; yes: it has left the screen
+    clc                                             ; prepare to add
+    adc #UFO_STEP_U                                 ; step right
+    sta ufo_x                                       ; store it
+    jmp draw_ufo                                    ; draw it there
+@left:                                              ; moving left
+    lda ufo_x                                       ; its x
+    beq @gone                                       ; at the left edge: it has left the screen
+    sec                                             ; set carry for subtraction
+    sbc #UFO_STEP_U                                 ; step left
+    sta ufo_x                                       ; store it
+    jmp draw_ufo                                    ; draw it there
+@gone:                                              ; the saucer has left the screen
+    lda #0                                          ; no saucer now
+    sta ufo_active                                  ; mark it gone
+    jmp ufo_schedule                                ; wait for the next one
+
+; Starts a saucer. It alternates direction each time, as in arcade.
+ufo_spawn:                                          ; start a crossing
+    lda #1                                          ; a saucer is on screen
+    sta ufo_active                                  ; mark it
+    lda #0                                          ; negate the direction
+    sec                                             ; set carry for subtraction
+    sbc ufo_dir                                     ; +2 becomes $FE, and $FE becomes +2
+    sta ufo_dir                                     ; store the new direction
+    cmp #UFO_STEP_U                                 ; now moving right?
+    bne @from_right                                 ; no
+    lda #0                                          ; right: enter at the left edge
+    jmp @place                                      ; place it
+@from_right:                                        ; left: enter at the right edge
+    lda #UFO_RIGHT_U                                ; the right edge
+@place:                                             ; A is the starting x
+    sta ufo_x                                       ; store it
+    lda #UFO_STEP_FRAMES                            ; restart the step timer
+    sta ufo_timer                                   ; store it
+    jmp draw_ufo                                    ; draw it
+
+draw_ufo:                                           ; draw the saucer at ufo_x
+    BLIT XRAM_UFO_SPRITE, 8, 8, 8, ufo_x, #UFO_Y    ; draw it
+    rts                                             ; return
+
+erase_ufo:                                          ; erase the saucer at ufo_x
+    BLIT XRAM_BLANK, 8, 8, 0, ufo_x, #UFO_Y         ; erase it
+    rts                                             ; return
+
+; Player bullet vs saucer. Returns A = 1 if the bullet hit it. The score goes
+; up by the points for the shot count, and the saucer is gone.
+check_ufo:                                          ; the bullet against the saucer
+    lda ufo_active                                  ; is a saucer on screen?
+    beq @miss                                       ; no
+    lda bullet_y                                    ; the bullet's top row
+    sec                                             ; set carry for subtraction
+    sbc #UFO_Y                                      ; distance from the saucer's top
+    clc                                             ; prepare to add
+    adc #7                                          ; the overlap window is -7 to +7 rows
+    cmp #15                                         ; within it?
+    bcs @miss                                       ; no: not at the saucer's height
+    lda bullet_u                                    ; the bullet's x
+    sec                                             ; set carry for subtraction
+    sbc ufo_x                                       ; distance from the saucer's left edge
+    cmp #8                                          ; within its 8 units?
+    bcs @miss                                       ; no
+    jsr erase_ufo                                   ; the saucer is hit
+    lda #0                                          ; no saucer now
+    sta ufo_active                                  ; mark it gone
+    lda #0                                          ; the bullet is used up
+    sta bullet_active                               ; mark it gone
+    lda shots_fired                                 ; the shot count picks the points
+    and #15                                         ; mod 16
+    tax                                             ; index the points tables with it
+    lda ufo_pts_lo,x                                ; low byte of the points
+    clc                                             ; prepare to add
+    adc score                                       ; add to the score's low byte
+    sta score                                       ; store it
+    lda ufo_pts_hi,x                                ; high byte of the points
+    adc score+1                                     ; add to the score's high byte, with carry
+    sta score+1                                     ; store it
+    jsr draw_score                                  ; show the new score
+    jsr ufo_schedule                                ; the next saucer comes later
+    lda #1                                          ; report: hit
+    rts                                             ; return
+@miss:                                              ; no hit
+    lda #0                                          ; report: no hit
     rts                                             ; return
 
 ; ---- shields ----

@@ -75,6 +75,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     octo_b         .res 32                          ; octopus frame B
     bullet_sprite  .res 8                           ; bullet, 1 byte by 8 rows
     bomb_sprite    .res 8                           ; alien bomb, 1 byte by 8 rows
+    ufo_sprite     .res 64                          ; bonus saucer, 8 bytes by 8 rows
     shield_block   .res 2                           ; one solid shield cell byte, then padding
     ; ca65 limits .res to 32767 bytes, so the bitmap is split in two halves
     ; that sit next to each other in XRAM.
@@ -96,6 +97,7 @@ XRAM_OCTO_A         = xram_layout_t::octo_a         ; XRAM address of octopus fr
 XRAM_OCTO_B         = xram_layout_t::octo_b         ; XRAM address of octopus frame B
 XRAM_BULLET_SPRITE  = xram_layout_t::bullet_sprite  ; XRAM address of the bullet sprite
 XRAM_BOMB_SPRITE    = xram_layout_t::bomb_sprite    ; XRAM address of the alien bomb sprite
+XRAM_UFO_SPRITE     = xram_layout_t::ufo_sprite     ; XRAM address of the bonus saucer sprite
 XRAM_SHIELD_BLOCK   = xram_layout_t::shield_block   ; XRAM address of the solid shield cell byte
 XRAM_BITMAP         = xram_layout_t::bitmap_top     ; XRAM address of the bitmap
 

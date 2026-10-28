@@ -1,0 +1,19 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke ufo_wait_lo 0                                  # the saucer's countdown is over
+poke ufo_wait_hi 0                                  # (both bytes zero)
+run 1                                               # the saucer appears
+peek ufo_active 1                                   # a saucer is crossing the screen
+peek ufo_x 0                                        # entering from the left edge (moving right)
+poke ufo_timer 200                                  # keep the saucer still for this test
+poke bullet_timer 3                                 # the bullet moves on the next frame
+poke bullet_y 32                                    # just below the saucer (rows 24-31)
+poke bullet_u 2                                     # inside the saucer's x (0 to 7)
+poke bullet_active 1                               # the bullet is in flight
+run 2                                               # the bullet moves up into the saucer
+peek ufo_active 0                                   # the saucer is hit and gone
+peek bullet_active 0                                # the bullet is used up
+peek score 100                                      # the first shot is worth 100 points
