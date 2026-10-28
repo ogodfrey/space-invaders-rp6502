@@ -1,0 +1,13 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke bullet_timer 3                                 # the bullet moves on the next frame
+poke bullet_y 184                                   # just below the shield's bottom row (180-183)
+poke bullet_u 35                                    # in bunker 0, column 2 (x = 33 + 2)
+poke bullet_active 1                                # the bullet is in flight
+run 2                                               # it moves up into row 2 (y = 176-179) and hits
+peek bullet_active 0                                # the bullet is used up
+peek shield_cells+24 0                              # row 2, column 2 of bunker 0 is destroyed
+peek shield_cells+23 1                              # its neighbor is still standing

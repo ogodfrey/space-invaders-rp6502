@@ -33,6 +33,12 @@ BOMB_OFFSET_U        = 2                            ; bomb x offset from the ali
 LIVES_START          = 3                            ; ships per game, as in arcade
 DEATH_FRAMES         = 120                          ; frames the game pauses after a ship is lost
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
+SHIELD_COUNT         = 4                            ; bunkers, as in arcade
+SHIELD_COLS          = 11                           ; cells across one bunker (2 px each)
+SHIELD_ROWS          = 4                            ; cells down one bunker (4 px each)
+SHIELD_CELLS         = SHIELD_COLS * SHIELD_ROWS    ; cells per bunker (44)
+SHIELD_PY            = 168                          ; top row of the shields, in pixels
+SHIELD_CELL_H        = 4                            ; height of one shield cell, in pixels
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 STATE_TITLE          = 0                            ; title screen: waiting for Space to start
 STATE_PLAY           = 1                            ; playing a wave
@@ -68,6 +74,21 @@ str_press_len = * - str_press                       ; length of the prompt
 
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
+
+; Shields: four bunkers of 11x4 cells. Each cell is 1 byte (2 px) wide and 4 px tall.
+shield_left_u:                                      ; left edge of each bunker, in 2-pixel units
+    .byte 33, 61, 89, 117                           ; spread across the field
+shield_base:                                        ; first cell index of each bunker
+    .byte 0, 44, 88, 132
+shield_roff:                                        ; first cell index of each row within a bunker
+    .byte 0, 11, 22, 33
+shield_row_py:                                      ; top row of each cell row, in pixels
+    .byte 168, 172, 176, 180
+shield_template:                                    ; the full shape of one bunker: 1 = cell, 0 = gap
+    .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 0
+    .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 1
+    .byte 1,1,1,0,0,0,0,0,1,1,1                     ; row 2: arch opening
+    .byte 1,1,0,0,0,0,0,0,0,1,1                     ; row 3: arch opening
 
 palette_rom:                                        ; 16 colors, 2 bytes each, for the bitmap
     COLOR_FROM_RGBA 0, 0, 0, 255            ; 0: black
@@ -227,6 +248,17 @@ bomb_slot:     .res 1                               ; index of the bomb being ha
 bomb_active:   .res BOMB_MAX                        ; 1 while each bomb slot is in use
 bomb_u:        .res BOMB_MAX                        ; x of each bomb, in 2-pixel units
 bomb_y:        .res BOMB_MAX                        ; top row of each bomb, in pixels
+shield_cells:  .res SHIELD_COUNT * SHIELD_CELLS     ; 1 while each shield cell stands
+sh_b:          .res 1                               ; bunker index in a shield scan
+sh_r:          .res 1                               ; cell row in a shield scan
+sh_c:          .res 1                               ; cell column in a shield scan
+sh_mode:       .res 1                               ; 0 kill the first hit, 1 kill all hits, 2 draw
+sh_x:          .res 1                               ; x of the cell being handled, in 2-pixel units
+sh_y:          .res 1                               ; top row of the cell being handled, in pixels
+rect_x:        .res 1                               ; x of the rectangle a shield scan tests
+rect_y:        .res 1                               ; top row of that rectangle
+rect_w:        .res 1                               ; its width in 2-pixel units
+rect_h:        .res 1                               ; its height in pixels
 bullet_active: .res 1                               ; 1 while a bullet is in flight
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
@@ -308,6 +340,12 @@ _main:                                              ; program entry point
     sta RIA_ADDR0+1                                 ; point portal 0 at it, high byte
     lda #0                                          ; the zero value to store
     sta RIA_RW0                                     ; write the zero byte that erases use
+    lda #<XRAM_SHIELD_BLOCK                         ; low byte of the shield cell byte
+    sta RIA_ADDR0                                   ; point portal 0 at it, low byte
+    lda #>XRAM_SHIELD_BLOCK                         ; high byte of the shield cell byte
+    sta RIA_ADDR0+1                                 ; point portal 0 at it, high byte
+    lda #$11                                        ; green: both pixels in palette entry 1
+    sta RIA_RW0                                     ; write the solid shield cell byte
 
 ; XRAM is not cleared at boot, so clear all 38400 bitmap bytes.
     lda #<XRAM_BITMAP                               ; low byte of the bitmap address
@@ -614,6 +652,7 @@ blit:                                               ; copy a block from XRAM to 
     rts                                             ; return
 
 draw_grid:                                          ; draw every living grid alien in the current frame
+    jsr shield_contact                              ; aliens low enough destroy the shield cells under them
     lda #0                                          ; not erasing
     sta grid_erase                                  ; store the mode
     jmp grid_apply                                  ; blit every living alien
@@ -729,7 +768,7 @@ update_bullet:                                      ; move the bullet and check 
 @step:                                              ; move the bullet one step
     lda #0                                          ; restart the timer
     sta bullet_timer                                ; store it
-    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase the bullet at its old position
+    jsr erase_bullet                                ; erase the bullet at its old position
     lda bullet_y                                    ; the bullet's row
     cmp #BULLET_STEP_PX                             ; room to move up one step?
     bcs @advance                                    ; yes: move it
@@ -742,6 +781,8 @@ update_bullet:                                      ; move the bullet and check 
     sbc #BULLET_STEP_PX                             ; move up one step
     sta bullet_y                                    ; store the new row
     jsr check_bombs                                 ; did the bullet hit an alien bomb?
+    bne @spent                                      ; yes: the bullet is gone
+    jsr check_shields                               ; did the bullet hit a shield cell?
     bne @spent                                      ; yes: the bullet is gone
     jsr check_hits                                  ; did the bullet hit a grid alien?
     bne @spent                                      ; yes: the bullet is gone
@@ -1042,7 +1083,13 @@ bomb_erase:                                         ; erase one alien bomb
     sta blit_x                                      ; destination x
     lda bomb_y,x                                    ; its top row
     sta blit_y                                      ; destination top row
-    jmp blit                                        ; erase the bomb
+    jsr blit                                        ; erase the bomb
+    ldx bomb_slot                                   ; the bomb's slot
+    lda bomb_u,x                                    ; its x
+    sta rect_x                                      ; the repair rectangle starts there
+    lda bomb_y,x                                    ; its top row
+    sta rect_y                                      ; and its top
+    jmp repair_rect                                 ; redraw any standing shield cells under it
 
 ; Moves every active bomb down one step when due. A bomb that hits the ship
 ; destroys it; a bomb past the floor is removed.
@@ -1075,6 +1122,25 @@ update_bombs:                                       ; move the alien bombs
     sta bomb_active,x                               ; free the slot
     jmp @next                                       ; go to the next slot
 @inside:                                            ; the bomb is on screen
+    ldx bomb_slot                                   ; the bomb's slot
+    lda bomb_u,x                                    ; its x
+    sta rect_x                                      ; the rectangle starts there
+    lda bomb_y,x                                    ; its top row
+    sta rect_y                                      ; and its top
+    lda #1                                          ; one unit wide
+    sta rect_w                                      ; store the width
+    lda #8                                          ; eight rows tall
+    sta rect_h                                      ; store the height
+    lda #0                                          ; kill the first cell hit
+    sta sh_mode                                     ; store the mode
+    jsr shield_scan                                 ; does the bomb hit a shield cell?
+    beq @no_cell                                    ; no
+    ldx bomb_slot                                   ; yes: the bomb is used up
+    lda #0                                          ; empty value
+    sta bomb_active,x                               ; free the slot
+    jmp @next                                       ; go to the next slot
+@no_cell:                                           ; the bomb did not hit a shield
+    ldx bomb_slot                                   ; the shield scan used X: reload the slot
     lda bomb_y,x                                    ; its top row
     sec                                             ; set carry for subtraction
     sbc #PLAYER_PY                                  ; distance below the ship's top row
@@ -1155,7 +1221,7 @@ player_die:                                         ; destroy the ship
     bne @clear                                      ; no: keep clearing
     lda bullet_active                               ; is a player bullet in flight?
     beq @no_bullet                                  ; no
-    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase it
+    jsr erase_bullet                                ; erase it and repair the shields under it
     lda #0                                          ; no bullet now
     sta bullet_active                               ; mark it gone
 @no_bullet:                                         ; the bullet is cleared
@@ -1210,6 +1276,7 @@ show_game_over:                                     ; the last ship is lost
 enter_title:                                        ; the title screen
     jsr clear_shots                                 ; remove the bullet and bombs
     jsr erase_grid                                  ; remove the aliens
+    jsr shield_clear_all                            ; remove the bunkers
     BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; remove the ship
     lda #STATE_TITLE                                ; the title screen
     sta game_state                                  ; store the state
@@ -1291,13 +1358,15 @@ new_wave:                                           ; reset the grid for a wave
     sta grid_alive,x                                ; store the flag
     dex                                             ; the previous alien
     bpl @fill                                       ; until index 0 is set
+    jsr shield_reset                                ; every bunker back to its full shape
+    jsr shield_draw_all                             ; draw them
     jmp draw_grid                                   ; draw the new wave
 
 ; Erases the bullet and every bomb, and empties their slots.
 clear_shots:                                        ; remove the bullet and bombs
     lda bullet_active                               ; is a bullet in flight?
     beq @no_bullet                                  ; no
-    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase it
+    jsr erase_bullet                                ; erase it and repair the shields under it
     lda #0                                          ; no bullet now
     sta bullet_active                               ; mark it gone
 @no_bullet:                                         ; the bullet is cleared
@@ -1366,4 +1435,225 @@ start_next_wave:                                    ; the next wave
     jsr new_wave                                    ; put the wave on screen
     lda #STATE_PLAY                                 ; back to play
     sta game_state                                  ; store the state
+    rts                                             ; return
+
+; ---- shields ----
+
+; Puts every bunker back to its full shape.
+shield_reset:                                       ; restore all shield cells
+    lda #0                                          ; start at the first bunker
+    sta sh_b                                        ; store it
+@bunker:                                            ; one bunker per pass
+    lda #0                                          ; start at its first cell
+    sta sh_c                                        ; use sh_c as the cell number here
+@cell:                                              ; one cell per pass
+    ldx sh_b                                        ; the bunker
+    lda shield_base,x                               ; its first cell index
+    clc                                             ; prepare to add
+    adc sh_c                                        ; the cell's index in shield_cells
+    tay                                             ; index shield_cells with it
+    ldx sh_c                                        ; the cell number in the template
+    lda shield_template,x                           ; 1 for a cell, 0 for a gap
+    sta shield_cells,y                              ; store it
+    inc sh_c                                        ; next cell
+    lda sh_c                                        ; the cell number
+    cmp #SHIELD_CELLS                               ; past the last cell?
+    bne @cell                                       ; no: keep going
+    inc sh_b                                        ; next bunker
+    lda sh_b                                        ; the bunker number
+    cmp #SHIELD_COUNT                               ; past the last bunker?
+    bne @bunker                                     ; no: keep going
+    rts                                             ; return
+
+; Erases every standing shield cell (used when the title screen comes up).
+shield_clear_all:                                   ; remove all bunkers
+    lda #0                                          ; the rectangle starts at the left edge
+    sta rect_x                                      ; store it
+    sta rect_y                                      ; and at the top
+    lda #200                                        ; wide and tall enough to cover every cell
+    sta rect_w                                      ; store the width
+    sta rect_h                                      ; store the height
+    lda #1                                          ; kill every cell it covers, erasing each
+    sta sh_mode                                     ; store the mode
+    jmp shield_scan                                 ; scan and erase
+
+; Draws every standing shield cell.
+shield_draw_all:                                    ; draw all bunkers
+    lda #0                                          ; the rectangle starts at the left edge
+    sta rect_x                                      ; store it
+    sta rect_y                                      ; and at the top
+    lda #200                                        ; wide and tall enough to cover every cell
+    sta rect_w                                      ; store the width
+    sta rect_h                                      ; store the height
+    lda #2                                          ; draw the cells it covers
+    sta sh_mode                                     ; store the mode
+    jmp shield_scan                                 ; scan and draw
+
+; Repairs the shield cells under the 1x8 rectangle at rect_x, rect_y after a
+; bullet or bomb has been erased there.
+repair_rect:                                        ; redraw standing cells under a shot's old place
+    lda #1                                          ; one unit wide: the shot's width
+    sta rect_w                                      ; store it
+    lda #8                                          ; eight rows tall: the shot's height
+    sta rect_h                                      ; store it
+    lda #2                                          ; draw, do not kill
+    sta sh_mode                                     ; store the mode
+    jmp shield_scan                                 ; scan and draw
+
+; Tests the shield cells against the rectangle at rect_x, rect_y, rect_w, rect_h.
+; sh_mode 0 kills the first cell hit and returns A = 1 (A = 0 if none).
+; sh_mode 1 kills every cell hit and returns A = 0.
+; sh_mode 2 draws every standing cell hit and returns A = 0.
+shield_scan:                                        ; test or draw shield cells under a rectangle
+    lda #0                                          ; start at the first bunker
+    sta sh_b                                        ; store it
+@bunker:                                            ; one bunker per pass
+    lda #0                                          ; start at its top row
+    sta sh_r                                        ; store the row
+@row:                                               ; one cell row per pass
+    lda #0                                          ; start at its first column
+    sta sh_c                                        ; store the column
+@cell:                                              ; one cell per pass
+    ldx sh_b                                        ; the bunker
+    lda shield_base,x                               ; its first cell index
+    clc                                             ; prepare to add
+    ldx sh_r                                        ; the cell row
+    clc                                             ; prepare to add
+    adc shield_roff,x                               ; add the row's offset within a bunker
+    clc                                             ; prepare to add
+    adc sh_c                                        ; add the column: the cell's index
+    tay                                             ; index shield_cells with it
+    lda shield_cells,y                              ; is this cell standing?
+    bne @standing                                   ; yes: test it
+    jmp @next                                       ; no: skip it
+@standing:                                          ; the cell is standing
+    ldx sh_b                                        ; the bunker
+    lda shield_left_u,x                             ; its left edge
+    clc                                             ; prepare to add
+    adc sh_c                                        ; add the column: this cell's x
+    sec                                             ; set carry for subtraction
+    sbc rect_x                                      ; distance from the rectangle's left edge
+    cmp rect_w                                      ; inside the rectangle's width?
+    bcc @x_ok                                       ; yes
+    jmp @next                                       ; no: no overlap
+@x_ok:                                              ; the cell's column is inside the rectangle
+    ldx sh_r                                        ; the cell row
+    lda shield_row_py,x                             ; the cell's top row
+    sec                                             ; set carry for subtraction
+    sbc rect_y                                      ; distance below the rectangle's top
+    cmp rect_h                                      ; does the cell start inside the rectangle?
+    bcc @overlap                                    ; yes
+    lda rect_y                                      ; no: does the rectangle start inside the cell?
+    ldx sh_r                                        ; reload the row
+    sec                                             ; set carry for subtraction
+    sbc shield_row_py,x                             ; distance below the cell's top
+    cmp #SHIELD_CELL_H                              ; inside the cell's 4 rows?
+    bcc @overlap                                    ; yes
+    jmp @next                                       ; no: no overlap
+@overlap:                                           ; the rectangle covers this cell
+    ldx sh_b                                        ; the bunker
+    lda shield_left_u,x                             ; its left edge
+    clc                                             ; prepare to add
+    adc sh_c                                        ; this cell's x
+    sta sh_x                                        ; remember it for drawing
+    ldx sh_r                                        ; the cell row
+    lda shield_row_py,x                             ; this cell's top row
+    sta sh_y                                        ; remember it for drawing
+    lda sh_mode                                     ; what is the scan for?
+    cmp #2                                          ; drawing?
+    beq @draw                                       ; yes
+    lda #0                                          ; no: the cell is destroyed
+    sta shield_cells,y                              ; mark it gone
+    BLIT XRAM_BLANK, 1, 4, 0, sh_x, sh_y            ; erase its pixels
+    lda sh_mode                                     ; the scan mode again
+    bne @next                                       ; mode 1 kills every hit: keep going
+    lda #1                                          ; mode 0: report the hit
+    rts                                             ; and stop
+@draw:                                              ; draw the standing cell
+    BLIT XRAM_SHIELD_BLOCK, 1, 4, 0, sh_x, sh_y     ; draw it
+@next:                                              ; move to the next cell
+    inc sh_c                                        ; next column
+    lda sh_c                                        ; the column
+    cmp #SHIELD_COLS                                ; past the last column?
+    beq @next_row                                   ; yes
+    jmp @cell                                       ; no: next cell
+@next_row:                                          ; move to the next row
+    inc sh_r                                        ; next row
+    lda sh_r                                        ; the row
+    cmp #SHIELD_ROWS                                ; past the last row?
+    beq @next_bunker                                ; yes
+    jmp @row                                        ; no: next row
+@next_bunker:                                       ; move to the next bunker
+    inc sh_b                                        ; next bunker
+    lda sh_b                                        ; the bunker
+    cmp #SHIELD_COUNT                               ; past the last bunker?
+    beq @done                                       ; yes
+    jmp @bunker                                     ; no: next bunker
+@done:                                              ; scan complete
+    lda #0                                          ; no cell was taken in the scan
+    rts                                             ; return
+
+; Player bullet vs shields. Returns A = 1 if the bullet was absorbed.
+check_shields:                                      ; the bullet against the bunkers
+    lda bullet_u                                    ; the bullet's x
+    sta rect_x                                      ; the scan's rectangle starts there
+    lda bullet_y                                    ; the bullet's top row
+    sta rect_y                                      ; and its top
+    lda #1                                          ; one unit wide
+    sta rect_w                                      ; store the width
+    lda #8                                          ; eight rows tall
+    sta rect_h                                      ; store the height
+    lda #0                                          ; kill the first cell hit
+    sta sh_mode                                     ; store the mode
+    jsr shield_scan                                 ; test the cells
+    beq @miss                                       ; no cell was hit
+    lda #0                                          ; the bullet is destroyed
+    sta bullet_active                               ; mark it gone
+    lda #1                                          ; report: absorbed
+    rts                                             ; return
+@miss:                                              ; the bullet got through
+    lda #0                                          ; report: not absorbed
+    rts                                             ; return
+
+; Erases the player bullet at its position, then repairs any shield under it.
+erase_bullet:                                       ; erase the player bullet
+    BLIT XRAM_BLANK, 1, 8, 0, bullet_u, bullet_y    ; erase its pixels
+    lda bullet_u                                    ; its x
+    sta rect_x                                      ; the repair rectangle starts there
+    lda bullet_y                                    ; its top row
+    sta rect_y                                      ; and its top
+    jmp repair_rect                                 ; redraw any standing shield cells under it
+
+; Aliens low enough to reach the bunkers destroy the cells they cover.
+shield_contact:                                     ; living aliens against the shields
+    lda #0                                          ; start at the first alien
+    sta grid_i                                      ; store the index
+@loop:                                              ; one alien per pass
+    ldx grid_i                                      ; the current alien's index
+    lda grid_alive,x                                ; is it alive?
+    beq @next                                       ; no
+    lda grid_row_off,x                              ; its row offset
+    clc                                             ; prepare to add
+    adc grid_y                                      ; its top row
+    bcs @next                                       ; past the top of the byte: far below the shields, handled by landing
+    cmp #SHIELD_PY-7                                ; its bottom row (top + 8) below the shields' top?
+    bcc @next                                       ; no: above the shields
+    sta rect_y                                      ; the rectangle's top row
+    ldx grid_i                                      ; reload the index
+    lda grid_u                                      ; the grid's x
+    clc                                             ; prepare to add
+    adc grid_col_u,x                                ; this alien's x
+    sta rect_x                                      ; the rectangle's x
+    lda #ALIEN_W_BYTES                              ; the alien's width
+    sta rect_w                                      ; store it
+    lda #8                                          ; the alien's height
+    sta rect_h                                      ; store it
+    lda #1                                          ; kill every cell it covers
+    sta sh_mode                                     ; store the mode
+    jsr shield_scan                                 ; destroy the covered cells
+@next:                                              ; next alien
+    inc grid_i                                      ; advance the index
+    lda grid_i                                      ; the index
+    cmp #GRID_COUNT                                 ; past the last alien?
+    bne @loop                                       ; no: keep going
     rts                                             ; return

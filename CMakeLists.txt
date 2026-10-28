@@ -23,6 +23,10 @@ rp6502_test(NAME bomb-hit COMMAND tests/bomb-hit.script # an alien bomb costs a 
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME shield-hit COMMAND tests/shield-hit.script # a player bullet destroys one shield cell
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME bullet-hit COMMAND tests/bullet-hit.script # a player bullet scores an alien in the bottom row
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
