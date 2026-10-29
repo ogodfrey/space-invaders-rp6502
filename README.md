@@ -16,11 +16,28 @@ and is not part of the RP6502 build.
 ## Current game
 
 The game draws on a 320x240 bitmap (VGA mode 3, 4 bits per pixel) with
-sprites copied into it. It has an animated, marching alien, a player ship,
-and a single player bullet. Move with A/D or the arrow keys and fire with
-Space. Hits increase the score; the alien respawns after a short pause. The
-score line is VGA console text on a plane above the bitmap. Sound, alien
-formations, and the remaining Apple II milestones are planned follow-up work.
+sprites copied into it. The layout follows the arcade's 224-pixel field,
+with the vertical positions scaled from 256 lines to 240.
+
+* An 11 by 5 grid of marching aliens, with the arcade's three alien types,
+  row scores (30, 20, 10), and waves that speed up.
+* A player ship with three lives, a player bullet, and an extra ship at 1500
+  points.
+* Alien bombs (up to three), some aimed at the ship's column, and four
+  destructible bunkers.
+* A bonus saucer that crosses the top of the screen.
+* Explosion bursts for hits and for the ship's destruction.
+* PSG sound: shot, explosion, saucer, bomb launch, and the marching bassline.
+* Title, play, wave-clear, and game-over states, a session high score, and
+  an attract demo where an autopilot plays after the high-score screen.
+
+Move with A/D or the arrow keys and fire with Space. Space during the
+attract demo starts a real game. The score line is VGA console text on a
+plane above the bitmap. The high score lasts only for the session.
+
+Known gaps against the arcade: the attract demo is a sweep-and-fire
+autopilot, not a full copy of the arcade demo, and the high score is not
+saved between runs.
 
 ## Build
 

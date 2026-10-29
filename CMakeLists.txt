@@ -66,3 +66,7 @@ rp6502_test(NAME extra-ship COMMAND tests/extra-ship.script # reaching 1500 poin
 rp6502_test(NAME explosions COMMAND tests/explosions.script # hits and ship deaths show bursts that clear
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
+
+rp6502_test(NAME bomb-launch COMMAND tests/bomb-launch.script # an alien bomb is launched and its sound runs out
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)

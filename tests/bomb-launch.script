@@ -1,0 +1,10 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke fire_timer 59                                  # the aliens are one frame from firing
+run 2                                               # the alien fire check runs
+peek bomb_active 1                                  # a bomb is launched in slot 0
+wait bomb_snd 0 20                                  # its launch sound runs out
+peek bomb_snd 0                                     # the sound is over
