@@ -38,6 +38,7 @@ DEATH_FRAMES         = 120                          ; frames the game pauses aft
 EXPL_SLOTS           = 4                            ; bursts that can be on screen at once
 EXPL_FRAMES          = 12                           ; frames an alien or saucer burst stays
 EXPL_DEATH_FRAMES    = 60                           ; frames the ship's burst stays
+DEMO_FRAMES          = 1800                         ; attract demo length: 30 s at 60 Hz
 RNG_SEED             = $A5                          ; nonzero start for the random number generator
 SHIELD_COUNT         = 4                            ; bunkers, as in arcade
 SHIELD_COLS          = 11                           ; cells across one bunker (2 px each)
@@ -345,6 +346,10 @@ ex_arg_x:      .res 1                               ; x for the next burst to sp
 ex_arg_y:      .res 1                               ; y for the next burst to spawn
 ex_arg_t:      .res 1                               ; length for the next burst to spawn
 ex_slot:       .res 1                               ; slot being updated
+demo_on:       .res 1                               ; 1 while the attract demo is playing
+demo_dir:      .res 1                               ; autopilot direction: 0 = left, 1 = right
+demo_fire:     .res 1                               ; 1 when the autopilot asks for a shot this frame
+demo_left:     .res 2                               ; frames left in the demo, low byte then high byte
 bomb_iv:       .res 1                               ; frames between bomb steps this wave
 bomb_snd:      .res 1                               ; frames left in the bomb's launch sound
 hi_lo:         .res 1                               ; best score this session, low byte
@@ -550,12 +555,24 @@ main_loop:                                          ; one pass per video frame
 @play:                                              ; the game is running
     jsr update_sound                                ; the effects and the bassline
     jsr update_explosions                           ; count down and erase finished bursts
+    lda demo_on                                     ; is the attract demo playing?
+    beq @not_demo                                   ; no
+    jsr demo_count                                  ; count it down; a Space press or its end changes the state
+    lda game_state                                  ; the state now
+    cmp #STATE_PLAY                                 ; still playing?
+    beq @not_demo                                   ; yes: finish this frame
+    jmp main_loop                                   ; the title is up: next frame
+@not_demo:                                          ; the game proper
     lda player_dead                                 ; is the ship destroyed?
     beq @live                                       ; no: play normally
     jsr dead_frame                                  ; count down the pause, then respawn
     jmp main_loop                                   ; skip the rest of this frame
 @live:                                              ; the ship is alive
-
+    lda demo_on                                     ; the autopilot flies the ship during the demo?
+    beq @keys                                       ; no: the keys steer it
+    jsr demo_steer                                  ; move the ship and decide on a shot
+    jmp @fire                                       ; continue to firing
+@keys:                                              ; the player's keys
     lda #HID_KEY_A                                  ; check the A key
     jsr key_held                                    ; is it held?
     bne @left                                       ; yes: move left
@@ -574,8 +591,14 @@ main_loop:                                          ; one pass per video frame
 @left:                                              ; move the player left
     jsr move_left                                   ; shift the ship left
 @fire:                                              ; handle the Space key
+    lda demo_on                                     ; the autopilot's shot during the demo?
+    bne @demo_space                                 ; yes: use its request
     lda #HID_KEY_SPACE                              ; check the Space key
     jsr key_held                                    ; is it held?
+    jmp @space_known                                ; the Space state is in A
+@demo_space:                                        ; the autopilot's shot request
+    lda demo_fire                                   ; 1 when it asks for a shot this frame
+@space_known:                                       ; A holds the Space state
     pha                                             ; keep the state for next frame
     beq @no_fire                                    ; not held: no shot
     lda prev_space                                  ; was Space held last frame?
@@ -1403,6 +1426,10 @@ player_die:                                         ; destroy the ship
 dead_frame:                                         ; count down the pause
     dec death_timer                                 ; one frame of the pause
     bne @wait                                       ; not finished: keep waiting
+    lda demo_on                                     ; the attract demo?
+    beq @lives                                      ; no: carry on with the lives
+    jmp enter_title                                 ; the demo ends at the first lost ship
+@lives:                                             ; a real game
     lda lives                                       ; ships left
     bne @respawn                                    ; some are left: respawn
     jmp game_over                                   ; none left: the game is over
@@ -1499,6 +1526,8 @@ show_game_over:                                     ; the last ship is lost
 
 ; Shows the title screen and clears the playfield.
 enter_title:                                        ; the title screen
+    lda #0                                          ; no attract demo
+    sta demo_on                                     ; store it
     jsr clear_shots                                 ; remove the bullet and bombs
     jsr erase_grid                                  ; remove the aliens
     jsr shield_clear_all                            ; remove the bunkers
@@ -1552,19 +1581,19 @@ enter_title:                                        ; the title screen
     rts                                             ; return
 
 ; On the title screen, a new press of Space starts a game.
-title_frame:                                        ; the title screen: flip to the high score, then wait for Space
+title_frame:                                        ; the title screen: flip to the high score, then the demo; Space starts a game
     dec attract_timer                               ; one frame of this attract screen
     bne @keys                                       ; still going
     lda attract_phase                               ; which screen is up?
-    bne @to_title                                   ; the high score: go back to the title
+    bne @to_demo                                    ; the high score: the demo plays next
     lda #1                                          ; the title: show the high score next
     sta attract_phase                               ; store the phase
     lda #ATTRACT_SCORE_FRAMES                       ; how long it stays up
     sta attract_timer                               ; start its countdown
     jsr draw_hiscore                                ; draw it
     jmp @keys                                       ; check the keys
-@to_title:                                          ; back to the title
-    jsr enter_title                                 ; draw it, and restart its countdown
+@to_demo:                                           ; the high score is over: play the demo
+    jsr start_demo                                  ; start the demo game
 @keys:                                              ; the Space key starts a game on either screen
     lda #HID_KEY_SPACE                              ; the Space key
     jsr key_held                                    ; is it held?
@@ -1578,8 +1607,74 @@ title_frame:                                        ; the title screen: flip to 
     sta prev_space                                  ; store it
     rts                                             ; return
 
+; Starts the attract demo: a game the autopilot plays until it dies or time runs out.
+start_demo:                                         ; start the attract demo
+    jsr new_game                                    ; a fresh game (this clears demo_on)
+    lda #1                                          ; the demo is on
+    sta demo_on                                     ; store it
+    lda #0                                          ; the autopilot sweeps left first
+    sta demo_dir                                    ; store the direction
+    lda #<DEMO_FRAMES                               ; frames of demo, low byte
+    sta demo_left                                   ; store it
+    lda #>DEMO_FRAMES                               ; frames of demo, high byte
+    sta demo_left+1                                 ; store it
+    rts                                             ; return
+
+; The autopilot: sweeps the ship from one edge to the other and asks for a shot
+; whenever none is in flight. Its shot request replaces the Space key.
+demo_steer:                                         ; move the ship and decide on a shot
+    lda #0                                          ; no shot requested yet
+    sta demo_fire                                   ; store the request
+    sta prev_space                                  ; each request counts as a new press
+    lda bullet_active                               ; a bullet already in flight?
+    bne @sweep                                      ; yes: do not ask for another
+    lda #1                                          ; ask for a shot
+    sta demo_fire                                   ; store the request
+@sweep:                                             ; move the ship
+    lda demo_dir                                    ; which way is it going?
+    bne @right                                      ; right
+    lda player_u                                    ; the ship's x
+    cmp #PLAYER_MIN_U                               ; at the left edge?
+    bne @left_step                                  ; no: keep going left
+    lda #1                                          ; turn around
+    sta demo_dir                                    ; go right next
+    rts                                             ; return
+@left_step:                                         ; one step left
+    jmp move_left                                   ; move it (and return)
+@right:                                             ; going right
+    lda player_u                                    ; the ship's x
+    cmp #PLAYER_MAX_U                               ; at the right edge?
+    bne @right_step                                 ; no: keep going right
+    lda #0                                          ; turn around
+    sta demo_dir                                    ; go left next
+    rts                                             ; return
+@right_step:                                        ; one step right
+    jmp move_right                                  ; move it (and return)
+
+; Counts the demo down one frame. Space takes over with a new game; when the
+; time is up the title returns.
+demo_count:                                         ; count the attract demo down
+    lda #HID_KEY_SPACE                              ; the Space key
+    jsr key_held                                    ; is it held?
+    beq @run                                        ; no: the demo goes on
+    jmp new_game                                    ; a player takes over: a real game starts
+@run:                                               ; the demo goes on
+    lda demo_left                                   ; the low byte of the frames left
+    bne @low                                        ; not zero: no borrow needed
+    dec demo_left+1                                 ; borrow from the high byte
+@low:                                               ; one frame less
+    dec demo_left                                   ; the low byte
+    lda demo_left                                   ; the low byte again
+    ora demo_left+1                                 ; any frames left at all?
+    bne @still                                      ; yes: keep playing
+    jmp enter_title                                 ; time is up: back to the title
+@still:                                             ; the demo goes on
+    rts                                             ; return
+
 ; Starts a fresh game: three ships, score zero, and the first wave.
 new_game:                                           ; start a game
+    lda #0                                          ; a game the player starts is not the demo
+    sta demo_on                                     ; store it
     lda #1                                          ; the first wave
     sta wave                                        ; store the wave number
     lda #LIVES_START                                ; full set of ships
@@ -1720,7 +1815,10 @@ play_check:                                         ; check for a cleared wave o
 
 ; Ends the game and shows the game-over message for OVER_FRAMES.
 game_over:                                          ; the last ship is lost, or the aliens landed
+    lda demo_on                                     ; the attract demo?
+    bne @no_record                                  ; yes: its score is not recorded
     jsr update_hiscore                              ; keep the best score
+@no_record:                                         ; the score is settled
     lda #STATE_OVER                                 ; the game-over screen
     sta game_state                                  ; store the state
     lda #OVER_FRAMES                                ; how long it stays up

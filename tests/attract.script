@@ -3,4 +3,8 @@ peek attract_phase 0                                # the title screen is up
 run 230                                             # 4 seconds on the title screen (240 frames)
 peek attract_phase 1                                # the high-score screen is up
 run 130                                             # 2 seconds on the high-score screen (120 frames)
-peek attract_phase 0                                # the title screen is back
+peek game_state 1                                   # then the attract demo is playing
+peek demo_on 1                                      # and the autopilot is flying the ship
+wait game_state 0 2400                              # the demo ends with a lost ship or its time limit
+peek attract_phase 0                                # and the title screen is back
+peek demo_on 0                                      # with no demo running
