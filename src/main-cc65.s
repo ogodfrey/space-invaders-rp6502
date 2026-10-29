@@ -70,11 +70,10 @@ STATE_WAVE           = 2                            ; a wave is cleared: pause, 
 STATE_OVER           = 3                            ; game over: show the message, then the title
 WAVE_PAUSE_FRAMES    = 120                          ; frames between waves
 OVER_FRAMES          = 180                          ; frames the game-over message stays up
-ALIEN_STEP_U         = 2                            ; grid move per step (4 px)
+ALIEN_STEP_U         = 1                            ; grid move per step (2 px, as in the arcade)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
 ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps at the start of wave 1 (see calc_interval)
-
 .segment "RODATA"                                   ; read-only data goes in ROM
 
 str_title:                                          ; HUD title text label
@@ -491,7 +490,7 @@ _main:                                              ; program entry point
     sta grid_u                                      ; store the grid's x
     lda #GRID_PY                                    ; starting top row of the grid
     sta grid_y                                      ; store the grid's top row
-    lda #ALIEN_STEP_U                               ; start moving right (+4)
+    lda #ALIEN_STEP_U                               ; start moving right (+2)
     sta alien_dir                                   ; store the grid's direction
     lda #0                                          ; first animation frame
     sta alien_frame                                 ; store the animation frame
@@ -1106,7 +1105,7 @@ update_grid:                                        ; move the alien grid
 @turn:                                              ; reverse the direction
     lda #0                                          ; start from zero
     sec                                             ; set carry for subtraction
-    sbc alien_dir                                   ; negate the step (+4 <-> -4)
+    sbc alien_dir                                   ; negate the step (+2 <-> -2)
     sta alien_dir                                   ; store the new direction
     jmp draw_grid                                   ; draw the dropped grid; no sideways move this step
 @sideways:                                          ; move by the direction
@@ -1945,28 +1944,13 @@ check_extra_ship:                                   ; the 1500-point ship
 @done:                                              ; nothing to award
     rts                                             ; return
 
-; Returns A = frames between grid steps. Starts at 3 + (living aliens / 4), so
-; a full grid steps every 16 frames. Each wave after the first takes 2 frames
-; off, and the interval never drops below 2.
+; Returns A = frames between grid steps. As in the arcade, one alien is updated
+; per frame, so a full grid steps once per living alien: 55 frames at the start
+; and one frame with a single alien left. The interval is never below 1.
 calc_interval:                                      ; the grid's step interval
-    lda wave                                        ; the wave number
-    sec                                             ; set carry for subtraction
-    sbc #1                                          ; waves completed before this one
-    asl a                                           ; two frames per completed wave
-    sta iv_tmp                                      ; keep the penalty
-    lda alive_count                                 ; the living aliens
-    lsr a                                           ; divide by 4
-    lsr a                                           ; the second halving
-    clc                                             ; prepare to add
-    adc #3                                          ; the base interval
-    sec                                             ; set carry for subtraction
-    sbc iv_tmp                                      ; subtract the wave penalty
-    bcs @ok                                         ; no borrow: the result is valid
-    lda #2                                          ; borrowed past zero: use the minimum
-@ok:                                                ; A is the interval
-    cmp #2                                          ; below the minimum?
-    bcs @done                                       ; no
-    lda #2                                          ; yes: use the minimum
+    lda alive_count                                 ; the living aliens: one frame each
+    bne @done                                       ; some are alive
+    lda #1                                          ; none: the minimum
 @done:                                              ; A is the interval
     rts                                             ; return
 

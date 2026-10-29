@@ -4,11 +4,15 @@ press space                                         # press Space to start a gam
 run 1                                               # one frame to register the press
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
-wait grid_u 50 300                                 # 13 grid steps: the grid reaches x = 50 (waits, so timing drift does not matter)
+poke bomb_active 1 1 1                              # fill all three bomb slots with parked bombs, so no alien bomb can hit the ship
+poke bomb_u 0 0 0                                   # parked at the left edge, away from the ship
+poke bomb_y 0 0 0                                   # at the top, so they cannot hit the ship in time
+poke bomb_iv 255                                 # the parked bombs move so slowly they stay put for the whole test
+wait grid_u 50 2000                                # 26 grid steps of 2 px: the grid reaches x = 50 (waits, so timing drift does not matter)
 peek grid_u 50                                      # the grid is at the right edge: 50 + 80 + 6 = 136
 peek grid_y 38                                      # and has not dropped yet
-wait grid_y 46 60                                   # the edge drops the grid one row and turns it
+wait grid_y 46 120                                  # the edge drops the grid one row and turns it
 peek grid_y 46                                      # the grid dropped one row (8 px)
-peek alien_dir 254                                  # and now moves left (-2 as $FE)
-wait grid_u 46 200                                 # two more steps to the left
+peek alien_dir 255                                  # and now moves left (-1 as $FF)
+wait grid_u 46 600                                 # two more steps to the left
 peek grid_u 46                                      # the grid is 4 units left of its turning point

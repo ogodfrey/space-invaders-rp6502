@@ -3,16 +3,20 @@ press space                                         # press Space to start a gam
 run 1                                               # one frame to register the press
 release space                                       # let go of Space
 run 2                                               # let the first frame of play run
+poke bomb_active 1 1 1                              # fill all three bomb slots with parked bombs, so no alien bomb can hit the ship
+poke bomb_u 0 0 0                                   # parked at the left edge, away from the ship
+poke bomb_y 0 0 0                                   # at the top, so they cannot hit the ship in time
+poke bomb_iv 255                                 # the parked bombs move so slowly they stay put for the whole test
 poke grid_alive+10 0                                # kill the right column of the top row
 poke grid_alive+21 0                                # kill the right column, row 2
 poke grid_alive+32 0                                # kill the right column, row 3
 poke grid_alive+43 0                                # kill the right column, row 4
 poke grid_alive+54 0                                # kill the right column, bottom row
-wait grid_u 58 1200                                # 17 grid steps: the grid reaches x = 58 (waits, so timing drift does not matter)
+wait grid_u 58 2400                                # 34 grid steps of 2 px: the grid reaches x = 58 (waits, so timing drift does not matter)
 peek grid_u 58                                      # the living edge is column 9, so the grid travels further
-peek alien_dir 2                                    # moving right, one step of 2 units
-wait alien_dir 254 60                              # the next step turns the grid around at its living edge
-peek alien_dir 254                                  # now it moves left (-2 as $FE)
+peek alien_dir 1                                    # moving right, one step of 2 units
+wait alien_dir 255 120                             # the next step turns the grid around at its living edge
+peek alien_dir 255                                  # now it moves left (-1 as $FF)
 peek grid_u 58                                      # with no sideways move on the turning step
-wait grid_u 52 200                                 # three more steps to the left
+wait grid_u 52 600                                 # three more steps to the left
 peek grid_u 52                                      # the grid is 6 units left of its turning point
