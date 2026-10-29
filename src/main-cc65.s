@@ -59,6 +59,8 @@ SND_EXPL_LO          = $8C                          ; explosion noise rate: 900 
 SND_EXPL_HI          = $0A                          ; high byte
 SND_UFO_LO           = $DC                          ; saucer tone: 500 Hz (1500 in 1/3 Hz), low byte
 SND_UFO_HI           = $05                          ; high byte
+SND_UFO2_LO          = $72                          ; the warble's other pitch: 550 Hz (1650 in 1/3 Hz), low byte
+SND_UFO2_HI          = $06                          ; high byte
 SND_BOMB_LO          = $94                          ; bomb launch tone: 660 Hz (1980 in 1/3 Hz), low byte
 SND_BOMB_HI          = $07                          ; high byte
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
@@ -332,6 +334,7 @@ rect_y:        .res 1                               ; top row of that rectangle
 rect_w:        .res 1                               ; its width in 2-pixel units
 rect_h:        .res 1                               ; its height in pixels
 ufo_active:    .res 1                               ; 1 while the saucer is crossing the screen
+ufo_warble:    .res 1                               ; frame count that alternates the saucer's pitch
 ufo_x:         .res 1                               ; saucer x, in 2-pixel units
 ufo_dir:       .res 1                               ; saucer step: +2 (right) or $FE (left)
 ufo_timer:     .res 1                               ; frames until the saucer's next step
@@ -1999,11 +2002,11 @@ draw_wave:                                          ; WAVE n on the second row
 ; Maps the PSG, gives each effect its envelope, and silences every channel.
 sound_init:                                         ; set up the PSG
     xreg_ria_psg XRAM_PSG                           ; map the PSG to XRAM
-    PSG_ENV 0, $02, $00, $16                        ; shot: square, fast attack, release rate 6
-    PSG_ENV 1, $02, $00, $48                        ; explosion: noise, release rate 8
-    PSG_ENV 2, $02, $20, $12                        ; bassline: square, short release
-    PSG_ENV 3, $02, $00, $34                        ; saucer: triangle, release rate 4
-    PSG_ENV 4, $02, $00, $18                        ; alien bomb launch: square, release rate 8
+    PSG_ENV 0, $32, $30, $16                        ; shot: square, attack level 3 (quiet), release rate 6
+    PSG_ENV 1, $32, $A8, $48                        ; explosion: noise, decays to level 10 and fades quickly
+    PSG_ENV 2, $32, $30, $12                        ; bassline: square, level 3, short release
+    PSG_ENV 3, $32, $30, $34                        ; saucer: triangle, level 3, release rate 4
+    PSG_ENV 4, $32, $30, $18                        ; alien bomb launch: square, level 3, release rate 8
     jmp snd_silence                                 ; no sound yet
 
 ; Writes the frequency in ps_lo and ps_hi to the channel at ps_off.
@@ -2107,8 +2110,37 @@ snd_ufo_off:                                        ; the saucer's tone stops
     lda #0                                          ; gate off
     jmp psg_set_gate                                ; release it
 
+; While the saucer crosses, its tone alternates between two pitches every 8
+; frames, which gives the arcade's warble.
+update_warble:                                      ; the saucer's warble on channel 3
+    lda ufo_active                                  ; is the saucer crossing?
+    beq @done                                       ; no
+    inc ufo_warble                                  ; one frame of the warble
+    lda ufo_warble                                  ; the frame count
+    and #7                                          ; every 8 frames
+    bne @done                                       ; not yet
+    lda ufo_warble                                  ; the frame count again
+    and #8                                          ; which of the two pitches?
+    bne @high                                       ; the upper pitch
+    lda #SND_UFO_LO                                 ; the lower pitch, low byte
+    sta ps_lo                                       ; for the write
+    lda #SND_UFO_HI                                 ; high byte
+    jmp @write                                      ; send it
+@high:                                              ; the upper pitch
+    lda #SND_UFO2_LO                                ; low byte
+    sta ps_lo                                       ; for the write
+    lda #SND_UFO2_HI                                ; high byte
+@write:                                             ; A is the high byte
+    sta ps_hi                                       ; for the write
+    lda #24                                         ; channel 3
+    sta ps_off                                      ; select it
+    jmp psg_set_freq                                ; set the pitch and return
+@done:                                              ; nothing to change this frame
+    rts                                             ; return
+
 ; Per frame: the shot's falling pitch, the explosion's end, and the bassline.
 update_sound:                                       ; sound for one frame
+    jsr update_warble                               ; the saucer's warble
     lda shot_frames                                 ; is the shot sounding?
     beq @explosion                                  ; no
     dec shot_frames                                 ; one frame of it
