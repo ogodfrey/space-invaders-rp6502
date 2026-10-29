@@ -601,10 +601,8 @@ main_loop:                                          ; one pass per video frame
 @space_known:                                       ; A holds the Space state
     pha                                             ; keep the state for next frame
     beq @no_fire                                    ; not held: no shot
-    lda prev_space                                  ; was Space held last frame?
-    bne @no_fire                                    ; yes: wait for a new press
     lda bullet_active                               ; is a bullet already in flight?
-    bne @no_fire                                    ; yes: only one at a time
+    bne @no_fire                                    ; yes: only one at a time, so hold Space to fire again as soon as it clears
     jsr fire_bullet                                 ; start a new bullet
 @no_fire:                                           ; end of the Space check
     pla                                             ; restore this frame's Space state
@@ -1625,7 +1623,6 @@ start_demo:                                         ; start the attract demo
 demo_steer:                                         ; move the ship and decide on a shot
     lda #0                                          ; no shot requested yet
     sta demo_fire                                   ; store the request
-    sta prev_space                                  ; each request counts as a new press
     lda bullet_active                               ; a bullet already in flight?
     bne @sweep                                      ; yes: do not ask for another
     lda #1                                          ; ask for a shot
@@ -1657,6 +1654,7 @@ demo_count:                                         ; count the attract demo dow
     lda #HID_KEY_SPACE                              ; the Space key
     jsr key_held                                    ; is it held?
     beq @run                                        ; no: the demo goes on
+    BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; erase the demo's ship before the game's first frame
     jmp new_game                                    ; a player takes over: a real game starts
 @run:                                               ; the demo goes on
     lda demo_left                                   ; the low byte of the frames left

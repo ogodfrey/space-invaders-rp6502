@@ -1,0 +1,13 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke alien_timer 0                                  # the grid will not move during the test
+press space                                         # hold Space down
+run 1                                               # the first shot starts
+peek bullet_active 1                                # a bullet is in flight
+wait bullet_active 0 300                            # it travels up and hits or leaves the screen
+wait bullet_active 1 10                              # holding Space fires again right away
+peek bullet_active 1                                # the second shot is in flight
+release space                                       # let go of Space

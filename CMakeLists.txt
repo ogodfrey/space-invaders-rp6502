@@ -71,3 +71,7 @@ rp6502_test(NAME explosions COMMAND tests/explosions.script # hits and ship deat
 rp6502_test(NAME bomb-launch COMMAND tests/bomb-launch.script # an alien bomb is launched and its sound runs out
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
+
+rp6502_test(NAME auto-fire COMMAND tests/auto-fire.script # holding Space fires again as soon as the bullet clears
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
