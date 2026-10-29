@@ -17,7 +17,7 @@ PLAYER_MIN_U         = 24                           ; leftmost player x (field l
 PLAYER_MAX_U         = 128                          ; rightmost player x (field right edge minus 16 px)
 FIELD_LEFT_U         = 24                           ; left edge of the 224-px arcade field, in 2-pixel units
 FIELD_RIGHT_U        = 136                          ; right edge of the field (24 + 112 units)
-ALIEN_W_BYTES        = 4                            ; alien width in bytes (8 px at 4 bits per pixel)
+ALIEN_W_BYTES        = 6                            ; alien width in bytes (12 px at 4 bits per pixel, as the widest arcade alien)
 GRID_COLS            = 11                           ; aliens per row in the grid, as in arcade
 GRID_ROWS            = 5                            ; rows of aliens in the grid, as in arcade
 GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid (55)
@@ -160,9 +160,10 @@ bitmap_config_rom:                                  ; Mode 3 config, 14 bytes, a
     .word BITMAP_WIDTH_PX, BITMAP_HEIGHT_PX         ; bitmap size in pixels
     .word XRAM_BITMAP, XRAM_PALETTE                 ; bitmap and palette addresses in XRAM
 
-; Sprites: the player (16x8), then squid, crab, and octopus A/B frames (8x8 each),
-; then the bullet and bomb (1 byte wide). The order matches xram_layout_t.
-; Uploaded in two parts, since one loop index covers only 256 bytes.
+; Sprites: the player (16x8), then squid, crab, and octopus A/B frames (12x8
+; each, with the squid centered), then the bullet and bomb (1 byte wide). The
+; order matches xram_layout_t. Uploaded in four parts, since one loop index
+; covers only 256 bytes.
 sprite_rom:                                         ; all sprite data in XRAM order
     .byte $00, $00, $00, $01, $10, $00, $00, $00    ; player row 0: cannon tip
     .byte $00, $00, $00, $11, $11, $00, $00, $00    ; player row 1
@@ -172,54 +173,54 @@ sprite_rom:                                         ; all sprite data in XRAM or
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 5
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 6
     .byte $11, $11, $11, $11, $11, $11, $11, $11    ; player row 7
-    .byte $00, $01, $10, $00                        ; squid A row 0: antennae
-    .byte $00, $11, $11, $00                        ; squid A row 1
-    .byte $01, $11, $11, $10                        ; squid A row 2
-    .byte $11, $01, $10, $11                        ; squid A row 3: eyes
-    .byte $11, $11, $11, $11                        ; squid A row 4
-    .byte $00, $10, $01, $00                        ; squid A row 5: legs in
-    .byte $01, $01, $10, $10                        ; squid A row 6: legs in
-    .byte $10, $10, $01, $01                        ; squid A row 7: feet in
-    .byte $00, $01, $10, $00                        ; squid B row 0: antennae
-    .byte $00, $11, $11, $00                        ; squid B row 1
-    .byte $01, $11, $11, $10                        ; squid B row 2
-    .byte $11, $01, $10, $11                        ; squid B row 3: eyes
-    .byte $11, $11, $11, $11                        ; squid B row 4
-    .byte $00, $10, $01, $00                        ; squid B row 5: legs out
-    .byte $01, $00, $00, $10                        ; squid B row 6: legs out
-    .byte $00, $10, $01, $00                        ; squid B row 7: feet out
-    .byte $00, $10, $01, $00                        ; crab A row 0: antennae
-    .byte $10, $11, $11, $01                        ; crab A row 1
-    .byte $11, $11, $11, $11                        ; crab A row 2
-    .byte $11, $01, $10, $11                        ; crab A row 3: eyes
-    .byte $11, $11, $11, $11                        ; crab A row 4
-    .byte $00, $10, $01, $00                        ; crab A row 5: legs in
-    .byte $01, $00, $00, $10                        ; crab A row 6: legs in
-    .byte $10, $00, $00, $01                        ; crab A row 7: feet in
-    .byte $00, $10, $01, $00                        ; crab B row 0: antennae
-    .byte $10, $11, $11, $01                        ; crab B row 1
-    .byte $11, $11, $11, $11                        ; crab B row 2
-    .byte $11, $01, $10, $11                        ; crab B row 3: eyes
-    .byte $11, $11, $11, $11                        ; crab B row 4
-    .byte $01, $01, $10, $10                        ; crab B row 5: legs out
-    .byte $10, $10, $01, $01                        ; crab B row 6: legs out
-    .byte $00, $10, $01, $00                        ; crab B row 7: feet out
-    .byte $00, $11, $11, $00                        ; octopus A row 0: head
-    .byte $01, $11, $11, $10                        ; octopus A row 1
-    .byte $11, $11, $11, $11                        ; octopus A row 2
-    .byte $11, $00, $00, $11                        ; octopus A row 3: eyes gap
-    .byte $11, $11, $11, $11                        ; octopus A row 4
-    .byte $00, $11, $11, $00                        ; octopus A row 5
-    .byte $01, $00, $00, $10                        ; octopus A row 6: legs in
-    .byte $10, $00, $00, $01                        ; octopus A row 7: feet in
-    .byte $00, $11, $11, $00                        ; octopus B row 0: head
-    .byte $01, $11, $11, $10                        ; octopus B row 1
-    .byte $11, $11, $11, $11                        ; octopus B row 2
-    .byte $11, $00, $00, $11                        ; octopus B row 3: eyes gap
-    .byte $11, $11, $11, $11                        ; octopus B row 4
-    .byte $00, $11, $11, $00                        ; octopus B row 5
-    .byte $10, $00, $00, $01                        ; octopus B row 6: legs out
-    .byte $01, $00, $00, $10                        ; octopus B row 7: feet out
+    .byte $00, $00, $01, $10, $00, $00              ; squid A row 0: antenna tip
+    .byte $00, $00, $11, $11, $00, $00              ; squid A row 1
+    .byte $00, $01, $11, $11, $10, $00              ; squid A row 2
+    .byte $00, $11, $01, $10, $11, $00              ; squid A row 3: eyes
+    .byte $00, $11, $11, $11, $11, $00              ; squid A row 4
+    .byte $00, $00, $10, $01, $00, $00              ; squid A row 5: legs in
+    .byte $00, $01, $10, $01, $10, $00              ; squid A row 6: legs in
+    .byte $00, $11, $01, $10, $11, $00              ; squid A row 7: feet in
+    .byte $00, $00, $01, $10, $00, $00              ; squid B row 0: antenna tip
+    .byte $00, $00, $11, $11, $00, $00              ; squid B row 1
+    .byte $00, $01, $11, $11, $10, $00              ; squid B row 2
+    .byte $00, $11, $01, $10, $11, $00              ; squid B row 3: eyes
+    .byte $00, $11, $11, $11, $11, $00              ; squid B row 4
+    .byte $00, $01, $01, $10, $10, $00              ; squid B row 5: legs out
+    .byte $00, $10, $00, $00, $01, $00              ; squid B row 6: legs out
+    .byte $00, $01, $00, $00, $10, $00              ; squid B row 7: feet out
+    .byte $00, $10, $00, $00, $10, $00              ; crab A row 0: antenna tips
+    .byte $00, $01, $00, $01, $00, $00              ; crab A row 1
+    .byte $00, $11, $11, $11, $10, $00              ; crab A row 2
+    .byte $01, $10, $11, $10, $11, $00              ; crab A row 3: eyes
+    .byte $11, $11, $11, $11, $11, $10              ; crab A row 4
+    .byte $10, $11, $11, $11, $10, $10              ; crab A row 5
+    .byte $10, $10, $00, $00, $10, $10              ; crab A row 6: claws
+    .byte $00, $01, $10, $11, $00, $00              ; crab A row 7: feet in
+    .byte $10, $00, $00, $00, $00, $10              ; crab B row 0: claws up
+    .byte $01, $00, $00, $00, $01, $00              ; crab B row 1
+    .byte $10, $11, $11, $11, $10, $10              ; crab B row 2
+    .byte $11, $10, $11, $10, $11, $10              ; crab B row 3: eyes
+    .byte $11, $11, $11, $11, $11, $10              ; crab B row 4
+    .byte $01, $11, $11, $11, $11, $00              ; crab B row 5
+    .byte $00, $10, $00, $00, $10, $00              ; crab B row 6
+    .byte $01, $00, $00, $00, $01, $00              ; crab B row 7: feet out
+    .byte $00, $00, $11, $11, $00, $00              ; octopus A row 0: head
+    .byte $01, $11, $11, $11, $11, $10              ; octopus A row 1
+    .byte $11, $11, $11, $11, $11, $11              ; octopus A row 2
+    .byte $11, $10, $01, $10, $01, $11              ; octopus A row 3: eyes
+    .byte $11, $11, $11, $11, $11, $11              ; octopus A row 4
+    .byte $00, $11, $00, $00, $11, $00              ; octopus A row 5
+    .byte $01, $10, $11, $11, $01, $10              ; octopus A row 6: tentacles in
+    .byte $11, $00, $10, $01, $00, $11              ; octopus A row 7: feet in
+    .byte $00, $00, $11, $11, $00, $00              ; octopus B row 0: head
+    .byte $01, $11, $11, $11, $11, $10              ; octopus B row 1
+    .byte $11, $11, $11, $11, $11, $11              ; octopus B row 2
+    .byte $11, $10, $01, $10, $01, $11              ; octopus B row 3: eyes
+    .byte $11, $11, $11, $11, $11, $11              ; octopus B row 4
+    .byte $01, $10, $11, $11, $01, $10              ; octopus B row 5
+    .byte $11, $01, $11, $11, $10, $11              ; octopus B row 6: tentacles out
+    .byte $10, $11, $00, $00, $11, $01              ; octopus B row 7: feet out
     .byte $22, $22, $22, $22, $22, $22, $22, $22    ; bullet: 8 rows of 1 byte, 2 white pixels
     .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb: zigzag, 8 rows of 1 byte
     .byte $00, $00, $33, $33, $33, $33, $00, $00    ; UFO row 0: dome
@@ -444,8 +445,10 @@ _main:                                              ; program entry point
     lda #1                                          ; portal 0 step: advance one byte per access
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
-    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 192      ; copy the player and squid and crab sprites
-    UPLOAD XRAM_OCTO_A, sprite_rom+192, 176         ; copy the octopus, bullet, bomb, saucer, and burst sprites
+    UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 128      ; copy the player and the first alien frames
+    UPLOAD (XRAM_PLAYER_SPRITE+128), sprite_rom+128, 128 ; copy the next alien frames
+    UPLOAD (XRAM_PLAYER_SPRITE+256), sprite_rom+256, 128 ; copy the last alien frames and the bullet and bomb
+    UPLOAD (XRAM_PLAYER_SPRITE+384), sprite_rom+384, 80  ; copy the saucer and burst sprites
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address

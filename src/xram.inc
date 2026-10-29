@@ -68,12 +68,12 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     bitmap_config  .tag mode3_config_t              ; Mode 3 config, 14 bytes
     blank          .res 2                           ; zero bytes, used to erase sprites
     player_sprite  .res 64                          ; player sprite, 8 bytes by 8 rows
-    squid_a        .res 32                          ; squid frame A, 4 bytes by 8 rows
-    squid_b        .res 32                          ; squid frame B
-    crab_a         .res 32                          ; crab frame A
-    crab_b         .res 32                          ; crab frame B
-    octo_a         .res 32                          ; octopus frame A
-    octo_b         .res 32                          ; octopus frame B
+    squid_a        .res 48                          ; squid frame A, 6 bytes by 8 rows
+    squid_b        .res 48                          ; squid frame B
+    crab_a         .res 48                          ; crab frame A
+    crab_b         .res 48                          ; crab frame B
+    octo_a         .res 48                          ; octopus frame A
+    octo_b         .res 48                          ; octopus frame B
     bullet_sprite  .res 8                           ; bullet, 1 byte by 8 rows
     bomb_sprite    .res 8                           ; alien bomb, 1 byte by 8 rows
     ufo_sprite     .res 64                          ; bonus saucer, 8 bytes by 8 rows

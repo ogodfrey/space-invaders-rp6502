@@ -8,11 +8,11 @@ poke grid_alive+21 0                                # kill the right column, row
 poke grid_alive+32 0                                # kill the right column, row 3
 poke grid_alive+43 0                                # kill the right column, row 4
 poke grid_alive+54 0                                # kill the right column, bottom row
-wait grid_u 60 1200                                # 18 grid steps: the grid reaches x = 60 (waits, so timing drift does not matter)
-peek grid_u 60                                      # the living edge is column 9, so the grid travels further
+wait grid_u 58 1200                                # 17 grid steps: the grid reaches x = 58 (waits, so timing drift does not matter)
+peek grid_u 58                                      # the living edge is column 9, so the grid travels further
 peek alien_dir 2                                    # moving right, one step of 2 units
 wait alien_dir 254 60                              # the next step turns the grid around at its living edge
 peek alien_dir 254                                  # now it moves left (-2 as $FE)
-peek grid_u 60                                      # with no sideways move on the turning step
-wait grid_u 54 200                                 # three more steps to the left
-peek grid_u 54                                      # the grid is 6 units left of its turning point
+peek grid_u 58                                      # with no sideways move on the turning step
+wait grid_u 52 200                                 # three more steps to the left
+peek grid_u 52                                      # the grid is 6 units left of its turning point
