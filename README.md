@@ -49,6 +49,11 @@ build also writes a web page that runs the ROM in the emulator:
 `build/cc65/debug/web/space-invaders/`. The GitHub workflow in
 [.github/workflows/web.yml](.github/workflows/web.yml) publishes the web build.
 
+<!-- rp6502
+preset: cc65/Release
+publish: space-invaders.zip
+-->
+
 ## Upload to an RP6502-PICO
 
     make upload DEVICE=/dev/ttyACM0
