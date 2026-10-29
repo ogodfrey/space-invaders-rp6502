@@ -43,7 +43,11 @@ saved between runs.
 
     make build
 
-The ROM is `build/cc65/debug/space-invaders/space-invaders.rp6502`.
+The ROM is `build/cc65/debug/space-invaders/space-invaders.rp6502`. The same
+build also writes a web page that runs the ROM in the emulator:
+`build/cc65/debug/web/space-invaders.zip`, unpacked in
+`build/cc65/debug/web/space-invaders/`. The GitHub workflow in
+[.github/workflows/web.yml](.github/workflows/web.yml) publishes the web build.
 
 ## Upload to an RP6502-PICO
 

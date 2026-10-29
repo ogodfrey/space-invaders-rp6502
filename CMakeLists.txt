@@ -7,6 +7,7 @@ project(SPACE-INVADERS ASM)                         # project name and language
 add_executable(space-invaders)                      # the ROM target
 rp6502_align(space-invaders "XRAM_.*")              # XRAM symbols must be even
 rp6502_executable(space-invaders DATA default RESET default) # package the output as a ROM
+rp6502_web(space-invaders)                          # package the ROM as a web page that runs it in the emulator
 target_sources(space-invaders PRIVATE               # sources of the ROM
     src/main-cc65.s                                 # the game
 )
