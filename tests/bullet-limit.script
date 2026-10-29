@@ -1,0 +1,15 @@
+run 30                                              # let startup finish on the title screen
+press space                                         # press Space to start a game
+run 1                                               # one frame to register the press
+release space                                       # let go of Space
+run 2                                               # let the first frame of play run
+poke alien_timer 0                                  # the grid will not move during the test
+poke bomb_active 0 0 0                              # no alien bombs
+poke bullet_u 2                                     # left of the field, away from aliens and shields
+poke bullet_y 28                                    # the bullet is just below the score text
+poke bullet_timer 3                                 # it moves on the next frame
+poke bullet_active 1                                # the bullet is in flight
+wait bullet_y 20 20                                 # it moves up to the first row below the score text
+peek bullet_active 1                                # and is still in flight
+wait bullet_active 0 20                             # the next step would enter the score text, so it is gone
+peek bullet_y 20                                    # its last row was just below the text

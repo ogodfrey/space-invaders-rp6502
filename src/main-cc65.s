@@ -72,6 +72,7 @@ WAVE_PAUSE_FRAMES    = 120                          ; frames between waves
 OVER_FRAMES          = 180                          ; frames the game-over message stays up
 ALIEN_STEP_U         = 1                            ; grid move per step (2 px, as in the arcade)
 BULLET_STEP_PX       = 8                            ; bullet move per step, in pixels
+HUD_BOTTOM_PY        = 16                           ; the score text ends above this row; bullets stop before it
 BULLET_STEP_FRAMES   = 4                            ; frames between bullet steps
 ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps at the start of wave 1 (see calc_interval)
 .segment "RODATA"                                   ; read-only data goes in ROM
@@ -221,7 +222,8 @@ sprite_rom:                                         ; all sprite data in XRAM or
     .byte $11, $01, $11, $11, $10, $11              ; octopus B row 6: tentacles out
     .byte $10, $11, $00, $00, $11, $01              ; octopus B row 7: feet out
     .byte $22, $22, $22, $22, $22, $22, $22, $22    ; bullet: 8 rows of 1 byte, 2 white pixels
-    .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb: zigzag, 8 rows of 1 byte
+    .byte $20, $02, $20, $02, $20, $02, $20, $02    ; bomb frame A: zigzag, 8 rows of 1 byte
+    .byte $20, $20, $02, $02, $20, $20, $02, $02    ; bomb frame B: the zigzag shifts, so the bomb wiggles
     .byte $00, $00, $33, $33, $33, $33, $00, $00    ; UFO row 0: dome
     .byte $00, $33, $33, $33, $33, $33, $33, $00    ; UFO row 1
     .byte $03, $33, $32, $33, $33, $33, $23, $30    ; UFO row 2: windows
@@ -279,6 +281,10 @@ alien_src_lo:                                       ; low byte of each alien spr
     .byte <XRAM_SQUID_A, <XRAM_SQUID_B, <XRAM_CRAB_A, <XRAM_CRAB_B, <XRAM_OCTO_A, <XRAM_OCTO_B
 alien_src_hi:                                       ; high byte of each alien sprite address
     .byte >XRAM_SQUID_A, >XRAM_SQUID_B, >XRAM_CRAB_A, >XRAM_CRAB_B, >XRAM_OCTO_A, >XRAM_OCTO_B
+bomb_src_lo:                                        ; low byte of each bomb animation frame's address
+    .byte <XRAM_BOMB_SPRITE, <XRAM_BOMB_SPRITE_B
+bomb_src_hi:                                        ; high byte of each bomb animation frame's address
+    .byte >XRAM_BOMB_SPRITE, >XRAM_BOMB_SPRITE_B
 grid_points:                                        ; points for each alien, by row, as in arcade
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
@@ -317,6 +323,7 @@ player_dead:   .res 1                               ; 1 while the ship is destro
 death_timer:   .res 1                               ; frames left in the pause after a ship is lost
 fire_timer:    .res 1                               ; frames since the aliens last tried to fire
 bomb_timer:    .res 1                               ; frames since the bombs last moved
+bomb_frame:    .res 1                               ; which animation frame the bombs show: 0 = A, 1 = B
 rng:           .res 1                               ; random number generator state
 bomb_slot:     .res 1                               ; index of the bomb being handled
 bomb_active:   .res BOMB_MAX                        ; 1 while each bomb slot is in use
@@ -447,7 +454,7 @@ _main:                                              ; program entry point
     UPLOAD XRAM_PLAYER_SPRITE, sprite_rom, 128      ; copy the player and the first alien frames
     UPLOAD (XRAM_PLAYER_SPRITE+128), sprite_rom+128, 128 ; copy the next alien frames
     UPLOAD (XRAM_PLAYER_SPRITE+256), sprite_rom+256, 128 ; copy the last alien frames and the bullet and bomb
-    UPLOAD (XRAM_PLAYER_SPRITE+384), sprite_rom+384, 80  ; copy the saucer and burst sprites
+    UPLOAD (XRAM_PLAYER_SPRITE+384), sprite_rom+384, 88  ; copy the second bomb frame, the saucer, and burst sprites
     UPLOAD XRAM_BITMAP_CONFIG, bitmap_config_rom, 14 ; copy the Mode 3 config into XRAM
 
     lda #<XRAM_BLANK                                ; low byte of the zero-byte address
@@ -527,6 +534,7 @@ _main:                                              ; program entry point
     sta player_dead                                 ; the ship is not destroyed
     sta fire_timer                                  ; no alien has fired yet
     sta bomb_timer                                  ; no bomb has moved yet
+    sta bomb_frame                                  ; the bombs start on frame A
     sta ufo_active                                  ; no saucer yet
     sta shots_fired                                 ; no shots fired yet
     sta hi_lo                                       ; no best score yet
@@ -913,9 +921,9 @@ update_bullet:                                      ; move the bullet and check 
     sta bullet_timer                                ; store it
     jsr erase_bullet                                ; erase the bullet at its old position
     lda bullet_y                                    ; the bullet's row
-    cmp #BULLET_STEP_PX                             ; room to move up one step?
+    cmp #HUD_BOTTOM_PY+BULLET_STEP_PX               ; would the next row still be below the score text?
     bcs @advance                                    ; yes: move it
-    lda #0                                          ; no: the bullet left the top of the screen
+    lda #0                                          ; no: the bullet reached the score text and is gone
     sta bullet_active                               ; mark it as gone
     rts                                             ; return
 @advance:                                           ; move the bullet up
@@ -1227,9 +1235,10 @@ alien_fire:                                         ; maybe launch an alien bomb
 
 ; Draws the bomb in slot bomb_slot at its position.
 bomb_draw:                                          ; draw one alien bomb
-    lda #<XRAM_BOMB_SPRITE                          ; low byte of the bomb sprite
+    ldx bomb_frame                                  ; the animation frame showing now
+    lda bomb_src_lo,x                               ; its low byte
     sta blit_src                                    ; source low byte
-    lda #>XRAM_BOMB_SPRITE                          ; high byte of the bomb sprite
+    lda bomb_src_hi,x                               ; its high byte
     sta blit_src+1                                  ; source high byte
     lda #1                                          ; 1 byte wide
     sta blit_w                                      ; store the width
@@ -1280,6 +1289,9 @@ update_bombs:                                       ; move the alien bombs
 @step:                                              ; move the bombs
     lda #0                                          ; restart the timer
     sta bomb_timer                                  ; store it
+    lda bomb_frame                                  ; the bombs' animation frame
+    eor #1                                          ; flip between frame A and frame B
+    sta bomb_frame                                  ; store it
     lda #0                                          ; start at the first slot
     sta bomb_slot                                   ; store the slot
 @loop:                                              ; one slot per pass

@@ -72,6 +72,14 @@ rp6502_test(NAME bomb-launch COMMAND tests/bomb-launch.script # an alien bomb is
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME bomb-anim COMMAND tests/bomb-anim.script # alien bombs alternate between two animation frames
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
+rp6502_test(NAME bullet-limit COMMAND tests/bullet-limit.script # the player bullet stops at the score text, not the top
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME auto-fire COMMAND tests/auto-fire.script # holding Space fires again as soon as the bullet clears
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
