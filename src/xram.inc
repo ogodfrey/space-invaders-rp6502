@@ -63,6 +63,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
 
 .struct xram_layout_t                               ; the whole XRAM layout the game uses
     keyboard       .tag keyboard_t                  ; keyboard bitmap, 32 bytes
+    psg            .res 64                          ; 8 PSG channels, 8 bytes each; must not cross a 256-byte page
     palette        .res 32                          ; 16 colors, 2 bytes each
     bitmap_config  .tag mode3_config_t              ; Mode 3 config, 14 bytes
     blank          .res 2                           ; zero bytes, used to erase sprites
@@ -78,7 +79,6 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
     ufo_sprite     .res 64                          ; bonus saucer, 8 bytes by 8 rows
     expl_sprite    .res 32                          ; explosion burst, 4 bytes by 8 rows
     shield_block   .res 2                           ; one solid shield cell byte, then padding
-    psg            .res 64                          ; 8 PSG channels, 8 bytes each, in one page
     ; ca65 limits .res to 32767 bytes, so the bitmap is split in two halves
     ; that sit next to each other in XRAM.
     ; 320 * 240 / 4 bytes each. ca65 rejects this as a symbol expression here.
