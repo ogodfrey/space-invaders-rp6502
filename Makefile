@@ -1,6 +1,9 @@
-BUILD ?= build/cc65/debug                           # build folder, overridable on the command line
-DEVICE ?= /dev/ttyACM0                              # serial device of the RP6502-PICO
-ROM ?= $(BUILD)/space-invaders/space-invaders.rp6502 # ROM file to upload
+# build folder, overridable on the command line
+BUILD ?= build/cc65/debug
+# serial device of the RP6502-PICO
+DEVICE ?= /dev/ttyACM0
+# ROM file to upload
+ROM ?= $(BUILD)/space-invaders/space-invaders.rp6502
 
 .PHONY: all build upload                            # targets that are not files
 
