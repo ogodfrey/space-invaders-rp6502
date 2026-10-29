@@ -5,7 +5,7 @@ release space                                       # let go of Space
 run 2                                               # let the first frame of play run
 poke bomb_active 1                                  # put a bomb in slot 0
 poke bomb_u 76                                      # directly above the ship (ship x = 76)
-poke bomb_y 184                                     # two steps above the ship's top row (200)
+poke bomb_y 172                                     # two steps above the ship's top row (188)
 run 20                                              # two bomb steps: the bomb hits the ship
 peek lives 2                                        # one ship was lost
 peek player_dead 1                                  # the game is paused

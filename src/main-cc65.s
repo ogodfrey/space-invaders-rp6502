@@ -11,7 +11,7 @@ CANVAS_320X240       = 1                            ; VGA canvas selector for 32
 
 ; Horizontal positions are in units of 2 pixels: a sprite byte holds two
 ; 4-bit pixels, so sprites move in whole bytes.
-PLAYER_PY            = 200                          ; player sprite top row, in pixels
+PLAYER_PY            = 188                          ; player sprite top row, in pixels (200 scaled to 240 lines)
 PLAYER_START_U       = 76                           ; player start x, in 2-pixel units (center of the field)
 PLAYER_MIN_U         = 24                           ; leftmost player x (field left edge)
 PLAYER_MAX_U         = 128                          ; rightmost player x (field right edge minus 16 px)
@@ -21,14 +21,15 @@ ALIEN_W_BYTES        = 4                            ; alien width in bytes (8 px
 GRID_COLS            = 11                           ; aliens per row in the grid, as in arcade
 GRID_ROWS            = 5                            ; rows of aliens in the grid, as in arcade
 GRID_COUNT           = GRID_COLS * GRID_ROWS        ; total aliens in the grid (55)
-GRID_PY              = 40                           ; top row of the first alien row, in pixels
+GRID_PY              = 38                           ; top row of the first alien row, in pixels (40 scaled)
+GRID_ROW_PX          = 15                           ; grid row pitch in pixels (16 in arcade, scaled to 240 lines)
 GRID_START_U         = FIELD_LEFT_U                 ; starting grid x, in 2-pixel units
 
 BOMB_MAX             = 3                            ; most alien bombs on screen at once, as in arcade
 BOMB_FIRE_FRAMES     = 60                           ; frames between alien fire attempts (tuning)
 BOMB_STEP_FRAMES     = 8                            ; frames between bomb moves (tuning)
 BOMB_STEP_PX         = 8                            ; bomb move per step, in pixels
-BOMB_FLOOR_PY        = 232                          ; a bomb at or below this row has left the screen
+BOMB_FLOOR_PY        = 218                          ; a bomb at or below this row has left the screen (232 scaled)
 BOMB_OFFSET_U        = 2                            ; bomb x offset from the alien's left edge (center)
 LIVES_START          = 3                            ; ships per game, as in arcade
 ATTRACT_TITLE_FRAMES = 240                          ; frames the title screen stays up before the high score (4 s)
@@ -42,9 +43,9 @@ SHIELD_COUNT         = 4                            ; bunkers, as in arcade
 SHIELD_COLS          = 11                           ; cells across one bunker (2 px each)
 SHIELD_ROWS          = 4                            ; cells down one bunker (4 px each)
 SHIELD_CELLS         = SHIELD_COLS * SHIELD_ROWS    ; cells per bunker (44)
-SHIELD_PY            = 168                          ; top row of the shields, in pixels
+SHIELD_PY            = 158                          ; top row of the shields, in pixels (168 scaled)
 SHIELD_CELL_H        = 4                            ; height of one shield cell, in pixels
-UFO_Y                = 24                           ; top row of the saucer, above the aliens
+UFO_Y                = 23                           ; top row of the saucer, above the aliens (24 scaled)
 UFO_STEP_U           = 2                            ; saucer move per step, in 2-pixel units (4 px)
 UFO_STEP_FRAMES      = 3                            ; frames between saucer steps (tuning)
 UFO_RIGHT_U          = 152                          ; the saucer leaves the screen past this x
@@ -121,7 +122,7 @@ shield_base:                                        ; first cell index of each b
 shield_roff:                                        ; first cell index of each row within a bunker
     .byte 0, 11, 22, 33
 shield_row_py:                                      ; top row of each cell row, in pixels
-    .byte 168, 172, 176, 180
+    .byte 158, 162, 166, 170
 shield_template:                                    ; the full shape of one bunker: 1 = cell, 0 = gap
     .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 0
     .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 1
@@ -256,7 +257,7 @@ grid_col_u:                                         ; x offset of each grid alie
 grid_row_off:                                       ; top row of each grid alien, from grid_y
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
-        .byte R * 16                                ; rows are 16 px apart
+        .byte R * GRID_ROW_PX                       ; rows are 15 px apart, scaled from arcade's 16
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
 grid_type2:                                         ; sprite type of each grid alien, times 2 (squid, crab, octopus)

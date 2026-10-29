@@ -10,7 +10,7 @@ peek ufo_active 1                                   # a saucer is crossing the s
 peek ufo_x 0                                        # entering from the left edge (moving right)
 poke ufo_timer 200                                  # keep the saucer still for this test
 poke bullet_timer 3                                 # the bullet moves on the next frame
-poke bullet_y 32                                    # just below the saucer (rows 24-31)
+poke bullet_y 31                                    # just below the saucer (rows 23-30)
 poke bullet_u 2                                     # inside the saucer's x (0 to 7)
 poke bullet_active 1                               # the bullet is in flight
 run 2                                               # the bullet moves up into the saucer
