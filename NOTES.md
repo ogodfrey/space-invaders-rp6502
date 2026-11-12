@@ -9,9 +9,9 @@ docs before you rely on any detail here.
 * Template cleaned up to cc65 assembly only. One ROM: `space-invaders`.
 * `src/main-cc65.s` is the entry point. It prints "Hello, world!" and
   includes `rp6502.inc` and `xram.inc`. Replace it with the game.
-* `src/xram.inc` maps the keyboard to XRAM. It has `XRAM_KEYBOARD`,
-  `KEYBOARD_PRESSED`, `xreg_ria_keyboard`, and the HID codes for A, D,
-  Space, and the arrows.
+* `src/xram.inc` maps the keyboard and gamepads to XRAM. It has
+  `XRAM_KEYBOARD`, `XRAM_GAMEPAD`, `KEYBOARD_PRESSED`, the device mapping
+  macros, and the input bit definitions.
 * `apple2/` holds the original Apple II source, for reference only. Its
   `plan.md` and `state.md` record the milestones. M0 to M6 are done. The
   Apple II hi-res graphics and keyboard code must be rewritten, not copied.

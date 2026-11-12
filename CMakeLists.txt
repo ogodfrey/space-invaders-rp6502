@@ -60,6 +60,10 @@ rp6502_test(NAME game-start COMMAND tests/game-start.script # emulator test of s
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME gamepad COMMAND tests/gamepad.script # emulator test of gamepad start, movement, and fire
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
+)
+
 rp6502_test(NAME extra-ship COMMAND tests/extra-ship.script # reaching 1500 points awards one extra ship
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )

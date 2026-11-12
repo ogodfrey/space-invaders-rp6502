@@ -31,9 +31,11 @@ with the vertical positions scaled from 256 lines to 240.
 * Title, play, wave-clear, and game-over states, a session high score, and
   an attract demo where an autopilot plays after the high-score screen.
 
-Move with A/D or the arrow keys and fire with Space. Space during the
-attract demo starts a real game. The score line is VGA console text on a
-plane above the bitmap. The high score lasts only for the session.
+Move with A/D, the arrow keys, or the first gamepad's d-pad or left stick;
+fire with Space or the gamepad's A button. Space, A, or Start starts a game
+from the title screen or takes over the attract demo. The score line is VGA
+console text on a plane above the bitmap. The high score lasts only for the
+session.
 
 Known gaps against the arcade: the attract demo is a sweep-and-fire
 autopilot, not a full copy of the arcade demo, and the high score is not

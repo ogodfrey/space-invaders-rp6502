@@ -1,0 +1,20 @@
+run 30                                              # let startup finish on the title screen
+pad 0 connect western sticks                       # connect the first gamepad
+pad 0 press start                                  # Start begins a game
+run 1                                               # one frame to register the press
+pad 0 release start                                # let go of Start
+run 2                                               # let the first frame of play run
+peek game_state 1                                  # the gamepad started a real game
+peek player_u 76                                   # ship starts at the center of the field
+pad 0 press left                                   # hold the d-pad left
+run 1                                               # one frame: one step left
+peek player_u 74                                   # ship moved 2 units
+pad 0 release left                                 # let go of the d-pad
+pad 0 stick 127 0 0 0                             # push the left stick right
+run 1                                               # one frame: one step right
+peek player_u 76                                   # ship moved 2 units
+pad 0 stick 0 0 0 0                               # release the stick
+pad 0 press a                                      # hold A to fire
+run 2                                               # let the bullet start
+peek bullet_active 1                               # a bullet is in flight
+pad 0 release a                                    # let go of A

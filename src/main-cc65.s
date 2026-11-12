@@ -81,7 +81,7 @@ str_title:                                          ; HUD title text label
     .byte "SPACE INVADERS     SCORE: "              ; title, then the score digits
 str_title_len = * - str_title                       ; length of the title text
 str_help:                                           ; control hint text label
-    .byte "A/D or arrows move  SPACE fires"         ; control hint shown under the title
+    .byte "A/D, arrows or pad move; Space/A fires"  ; control hint shown under the title
 str_help_len = * - str_help                         ; length of the hint text
 str_lives:                                          ; lives label text
     .byte "LIVES "                                  ; label shown before the count
@@ -93,7 +93,7 @@ str_name:                                           ; the game's name on the tit
     .byte "SPACE INVADERS"                          ; title text
 str_name_len = * - str_name                         ; length of the name
 str_press:                                          ; prompt on the title screen
-    .byte "PRESS SPACE TO START"                    ; how to begin
+    .byte "PRESS SPACE OR PAD A/START"              ; how to begin
 str_press_len = * - str_press                       ; length of the prompt
 str_wave:                                           ; wave counter label
     .byte "WAVE "                                   ; shown before the wave number
@@ -377,7 +377,9 @@ bullet_active: .res 1                               ; 1 while a bullet is in fli
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
 bullet_timer:  .res 1                               ; frames since the bullet last moved
-prev_space:    .res 1                               ; Space state last frame, to detect a new press
+prev_action:   .res 1                               ; start/fire state last frame, to detect a new press
+pad_dirs:      .res 1                               ; d-pad and left-stick directions this frame
+input_mask:    .res 1                               ; button bit being checked
 last_vsync:    .res 1                               ; VSYNC count at the last frame
 score:         .res 2                               ; score, low byte then high byte
 num:           .res 2                               ; working copy of the score while printing it
@@ -434,13 +436,14 @@ blit_y:        .res 1                               ; destination top row, in pi
     sta blit_x                                      ; store it for the blitter
     lda yop                                         ; destination top row in pixels
     sta blit_y                                      ; store it for the blitter
-    jsr blit                                        ; copy the block
+    jsr blit_block                                  ; copy the block
 .endmacro                                           ; end of BLIT
 
 ; Entry point. The C runtime has already set the stack pointer and cleared
 ; decimal mode, and it halts the 6502 with the status we return.
 _main:                                              ; program entry point
     xreg_ria_keyboard XRAM_KEYBOARD                 ; map the keyboard bitmap into XRAM
+    xreg_ria_gamepad XRAM_GAMEPAD                   ; map the gamepads into XRAM
     lda #1                                          ; portal 0 step: advance one byte per access
     sta RIA_STEP0                                   ; set portal 0 step
     UPLOAD XRAM_PALETTE, palette_rom, 32            ; copy the 16-color palette into XRAM
@@ -502,7 +505,7 @@ _main:                                              ; program entry point
     lda #0                                          ; zero for the flags and score below
     sta bullet_active                               ; no bullet in flight yet
     sta bullet_timer                                ; clear the bullet move timer
-    sta prev_space                                  ; Space was not held last frame
+    sta prev_action                                 ; no start or fire input was held last frame
     sta score                                       ; clear the score low byte
     sta score+1                                     ; clear the score high byte
 
@@ -572,32 +575,44 @@ main_loop:                                          ; one pass per video frame
     jmp main_loop                                   ; skip the rest of this frame
 @live:                                              ; the ship is alive
     lda demo_on                                     ; the autopilot flies the ship during the demo?
-    beq @keys                                       ; no: the keys steer it
+    beq @keys                                       ; no: player controls steer it
     jsr demo_steer                                  ; move the ship and decide on a shot
     jmp @fire                                       ; continue to firing
-@keys:                                              ; the player's keys
+@keys:                                              ; the player's keyboard and gamepad controls
+    jsr gamepad_directions                          ; combine the d-pad and left stick
+    sta pad_dirs                                    ; keep the directions for this frame
     lda #HID_KEY_A                                  ; check the A key
     jsr key_held                                    ; is it held?
     bne @left                                       ; yes: move left
     lda #HID_KEY_ARROW_LEFT                         ; check the left arrow
     jsr key_held                                    ; is it held?
     bne @left                                       ; yes: move left
+    lda pad_dirs                                    ; check the gamepad's left direction
+    and #GAMEPAD_DPAD_LEFT                          ; d-pad and left-stick bits match
+    bne @left                                       ; yes: move left
     lda #HID_KEY_D                                  ; check the D key
     jsr key_held                                    ; is it held?
     bne @right                                      ; yes: move right
     lda #HID_KEY_ARROW_RIGHT                        ; check the right arrow
     jsr key_held                                    ; is it held?
+    bne @right                                      ; yes: move right
+    lda pad_dirs                                    ; check the gamepad's right direction
+    and #GAMEPAD_DPAD_RIGHT                         ; d-pad and left-stick bits match
     beq @fire                                       ; no: no movement this frame
 @right:                                             ; move the player right
     jsr move_right                                  ; shift the ship right
     jmp @fire                                       ; continue to firing
 @left:                                              ; move the player left
     jsr move_left                                   ; shift the ship left
-@fire:                                              ; handle the Space key
+@fire:                                              ; handle the keyboard or gamepad fire input
     lda demo_on                                     ; the autopilot's shot during the demo?
     bne @demo_space                                 ; yes: use its request
     lda #HID_KEY_SPACE                              ; check the Space key
     jsr key_held                                    ; is it held?
+    bne @space_known                                ; yes: fire
+    ldx #GAMEPAD_PLAYER_BTN0                        ; the first gamepad's A button
+    lda #GAMEPAD_BTN0_A                             ; check the A button
+    jsr gamepad_button_held                         ; is it held?
     jmp @space_known                                ; the Space state is in A
 @demo_space:                                        ; the autopilot's shot request
     lda demo_fire                                   ; 1 when it asks for a shot this frame
@@ -609,7 +624,7 @@ main_loop:                                          ; one pass per video frame
     jsr fire_bullet                                 ; start a new bullet
 @no_fire:                                           ; end of the Space check
     pla                                             ; restore this frame's Space state
-    sta prev_space                                  ; remember it for next frame
+    sta prev_action                                 ; remember it for next frame
     jsr update_bullet                               ; move the bullet
     jsr update_grid                                 ; move the alien grid
     jsr alien_fire                                  ; maybe launch an alien bomb
@@ -692,6 +707,59 @@ key_held:                                           ; test one key in the keyboa
     and #1                                          ; A = 1 if held, 0 if not
     rts                                             ; return with the flags set
 
+; Returns A = 1 if the first gamepad has the matching d-pad or left-stick direction.
+gamepad_directions:                                 ; merge d-pad and left-stick directions
+    lda #<(XRAM_GAMEPAD + GAMEPAD_PLAYER_DPAD)      ; low byte of the d-pad field
+    sta RIA_ADDR0                                   ; point portal 0 at it, low byte
+    lda #>(XRAM_GAMEPAD + GAMEPAD_PLAYER_DPAD)      ; high byte of the d-pad field
+    sta RIA_ADDR0+1                                 ; point portal 0 at it, high byte
+    lda RIA_RW0                                     ; read the d-pad directions
+    and #$0F                                        ; discard connection and type flags
+    sta pad_dirs                                    ; keep the d-pad directions
+    lda #<(XRAM_GAMEPAD + GAMEPAD_PLAYER_STICKS)    ; low byte of the stick directions
+    sta RIA_ADDR0                                   ; point portal 0 at it, low byte
+    lda #>(XRAM_GAMEPAD + GAMEPAD_PLAYER_STICKS)    ; high byte of the stick directions
+    sta RIA_ADDR0+1                                 ; point portal 0 at it, high byte
+    lda RIA_RW0                                     ; read the stick directions
+    and #$0F                                        ; only the left stick shares d-pad bits
+    ora pad_dirs                                    ; combine with the d-pad
+    rts                                             ; return the merged directions
+
+; Tests the gamepad button mask in A at the field offset in X.
+gamepad_button_held:                                ; read one button bit from gamepad 0
+    sta input_mask                                  ; keep the requested button mask
+    txa                                             ; the selected field offset
+    clc                                             ; prepare to add the base address
+    adc #<XRAM_GAMEPAD                              ; low byte of the gamepad address
+    sta RIA_ADDR0                                   ; point portal 0 at the field, low
+    lda #>XRAM_GAMEPAD                              ; high byte of the gamepad address
+    adc #0                                          ; add the carry from the low byte
+    sta RIA_ADDR0+1                                 ; point portal 0 at the field, high
+    lda RIA_RW0                                     ; read the field through portal 0
+    and input_mask                                  ; keep only the requested button bit
+    beq @released                                   ; the button is up
+    lda #1                                          ; the button is held
+    rts                                             ; return true
+@released:                                          ; the button is up
+    lda #0                                          ; return false
+    rts                                             ; return
+
+; Returns A = 1 if Space, gamepad A, or gamepad Start is held.
+start_held:                                         ; check all ways to start or take over
+    lda #HID_KEY_SPACE                              ; keyboard start button
+    jsr key_held                                    ; is it held?
+    bne @held                                       ; yes
+    ldx #GAMEPAD_PLAYER_BTN0                        ; gamepad A button field
+    lda #GAMEPAD_BTN0_A                             ; gamepad A button mask
+    jsr gamepad_button_held                         ; is it held?
+    bne @held                                       ; yes
+    ldx #GAMEPAD_PLAYER_BTN1                        ; gamepad Start button field
+    lda #GAMEPAD_BTN1_START                         ; gamepad Start button mask
+    jmp gamepad_button_held                         ; return whether it is held
+@held:                                              ; a start input is held
+    lda #1                                          ; return true
+    rts                                             ; return
+
 draw_score:                                         ; redraw the title and score on the first row
     lda #0                                          ; row 0
     sta cur_row                                     ; set the row
@@ -751,7 +819,7 @@ print_num:                                          ; print the 16-bit value in 
 
 ; Copies the sprite block from XRAM to the bitmap, row by row, through the
 ; two portals. Portal 1 reads blit_src, advancing by blit_stride per row.
-blit:                                               ; copy a block from XRAM to the bitmap
+blit_block:                                         ; copy a block from XRAM to the bitmap
     lda #1                                          ; portal 0 advances one byte per write
     sta RIA_STEP0                                   ; set portal 0's step
     lda #1                                          ; assume a nonzero stride
@@ -842,7 +910,7 @@ grid_apply:                                         ; blit an 8-row block at eac
     clc                                             ; prepare to add
     adc grid_y                                      ; add the grid's top row
     sta blit_y                                      ; destination top row
-    jsr blit                                        ; copy the block
+    jsr blit_block                                  ; copy the block
 @skip:                                              ; move to the next alien
     inc grid_i                                      ; advance the index
     lda grid_i                                      ; the index
@@ -1240,7 +1308,7 @@ bomb_draw:                                          ; draw one alien bomb
     sta blit_x                                      ; destination x
     lda bomb_y,x                                    ; its top row
     sta blit_y                                      ; destination top row
-    jmp blit                                        ; copy the sprite
+    jmp blit_block                                  ; copy the sprite
 
 ; Erases the bomb in slot bomb_slot at its position.
 bomb_erase:                                         ; erase one alien bomb
@@ -1259,7 +1327,7 @@ bomb_erase:                                         ; erase one alien bomb
     sta blit_x                                      ; destination x
     lda bomb_y,x                                    ; its top row
     sta blit_y                                      ; destination top row
-    jsr blit                                        ; erase the bomb
+    jsr blit_block                                  ; erase the bomb
     ldx bomb_slot                                   ; the bomb's slot
     lda bomb_u,x                                    ; its x
     sta rect_x                                      ; the repair rectangle starts there
@@ -1581,8 +1649,8 @@ enter_title:                                        ; the title screen
     PUT_STR str_pts_ufo, str_pts_ufo_len            ; the saucer's points vary
     rts                                             ; return
 
-; On the title screen, a new press of Space starts a game.
-title_frame:                                        ; the title screen: flip to the high score, then the demo; Space starts a game
+; On the title screen, a new start input starts a game.
+title_frame:                                        ; the title screen: flip to the high score, then the demo
     dec attract_timer                               ; one frame of this attract screen
     bne @keys                                       ; still going
     lda attract_phase                               ; which screen is up?
@@ -1595,17 +1663,16 @@ title_frame:                                        ; the title screen: flip to 
     jmp @keys                                       ; check the keys
 @to_demo:                                           ; the high score is over: play the demo
     jsr start_demo                                  ; start the demo game
-@keys:                                              ; the Space key starts a game on either screen
-    lda #HID_KEY_SPACE                              ; the Space key
-    jsr key_held                                    ; is it held?
+@keys:                                              ; any start input starts a game on either screen
+    jsr start_held                                  ; check Space, gamepad A, or gamepad Start
     pha                                             ; keep this frame's state
     beq @no_start                                   ; not held: do not start
-    lda prev_space                                  ; was it held last frame?
+    lda prev_action                                 ; was it held last frame?
     bne @no_start                                   ; yes: not a new press
     jsr new_game                                    ; a new press starts the game
 @no_start:                                          ; remember the state for next frame
     pla                                             ; restore this frame's state
-    sta prev_space                                  ; store it
+    sta prev_action                                 ; store it
     rts                                             ; return
 
 ; Starts the attract demo: a game the autopilot plays until it dies or time runs out.
@@ -1651,11 +1718,10 @@ demo_steer:                                         ; move the ship and decide o
 @right_step:                                        ; one step right
     jmp move_right                                  ; move it (and return)
 
-; Counts the demo down one frame. Space takes over with a new game; when the
-; time is up the title returns.
+; Counts the demo down one frame. A start input takes over; when the time is
+; up the title returns.
 demo_count:                                         ; count the attract demo down
-    lda #HID_KEY_SPACE                              ; the Space key
-    jsr key_held                                    ; is it held?
+    jsr start_held                                  ; check Space, gamepad A, or gamepad Start
     beq @run                                        ; no: the demo goes on
     BLIT XRAM_BLANK, 8, 8, 0, player_u, #PLAYER_PY  ; erase the demo's ship before the game's first frame
     jmp new_game                                    ; a player takes over: a real game starts

@@ -13,6 +13,16 @@ HID_KEY_SPACE       = $2C                           ; Space bar
 HID_KEY_ARROW_RIGHT = $4F                           ; right arrow
 HID_KEY_ARROW_LEFT  = $50                           ; left arrow
 
+GAMEPAD_PLAYERS       = 4                         ; RIA gamepad slots
+GAMEPAD_DPAD_LEFT     = $04                       ; left direction
+GAMEPAD_DPAD_RIGHT    = $08                       ; right direction
+GAMEPAD_BTN0_A        = $01                       ; south/primary face button
+GAMEPAD_BTN1_START    = $08                       ; Start button
+GAMEPAD_PLAYER_DPAD   = 0                         ; first gamepad's d-pad field
+GAMEPAD_PLAYER_STICKS = 1                         ; first gamepad's digital stick directions
+GAMEPAD_PLAYER_BTN0   = 2                         ; first gamepad's primary button field
+GAMEPAD_PLAYER_BTN1   = 3                         ; first gamepad's secondary button field
+
 .macro KEYBOARD_PRESSED keys, code                  ; test a key bit in a 6502 RAM bitmap
     lda keys + (code >> 3)                          ; load the byte holding the key (6502 RAM, not XRAM)
     and #1 << (code & 7)                            ; isolate the key's bit
@@ -22,9 +32,31 @@ HID_KEY_ARROW_LEFT  = $50                           ; left arrow
     xreg $0, $0, $00, addr                          ; device 0, channel 0, index 0: keyboard
 .endmacro                                           ; end of xreg_ria_keyboard
 
+.macro xreg_ria_gamepad addr                       ; map the gamepad states into XRAM
+    xreg $0, $0, $02, addr
+.endmacro                                           ; end of xreg_ria_gamepad
+
 .struct keyboard_t                                  ; keyboard bitmap layout
     keys .res 32                                    ; one bit per HID key code, 32 bytes
 .endstruct                                          ; end of keyboard_t
+
+.struct gamepad_player_t                           ; one 10-byte player record
+    dpad   .byte
+    sticks .byte
+    btn0   .byte
+    btn1   .byte
+    lx     .byte
+    ly     .byte
+    rx     .byte
+    ry     .byte
+    l2     .byte
+    r2     .byte
+.endstruct
+
+.struct gamepad_t                                  ; four player records, 10 bytes each
+    player .tag gamepad_player_t
+    .res (::GAMEPAD_PLAYERS - 1) * .sizeof(::gamepad_player_t)
+.endstruct
 
 ; Mode 3 bitmap configuration, as the VGA docs define it
 .struct mode3_config_t                              ; Mode 3 config layout, 14 bytes
@@ -63,6 +95,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
 
 .struct xram_layout_t                               ; the whole XRAM layout the game uses
     keyboard       .tag keyboard_t                  ; keyboard bitmap, 32 bytes
+    gamepad        .tag gamepad_t                  ; four 10-byte gamepad records
     psg            .res 64                          ; 8 PSG channels, 8 bytes each; must not cross a 256-byte page
     palette        .res 32                          ; 16 colors, 2 bytes each
     bitmap_config  .tag mode3_config_t              ; Mode 3 config, 14 bytes
@@ -87,6 +120,7 @@ BITMAP_HEIGHT_PX = 240                              ; bitmap height in pixels
 .endstruct                                          ; end of xram_layout_t
 
 XRAM_KEYBOARD       = xram_layout_t::keyboard       ; XRAM address of the keyboard bitmap
+XRAM_GAMEPAD        = xram_layout_t::gamepad       ; XRAM address of the gamepad states
 XRAM_PALETTE        = xram_layout_t::palette        ; XRAM address of the palette
 XRAM_BITMAP_CONFIG  = xram_layout_t::bitmap_config  ; XRAM address of the Mode 3 config
 XRAM_BLANK          = xram_layout_t::blank          ; XRAM address of the zero bytes
