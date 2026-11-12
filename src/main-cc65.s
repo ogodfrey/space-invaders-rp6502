@@ -404,7 +404,7 @@ blit_y:        .res 1                               ; destination top row, in pi
 
 .macro PUT_STR label, len                           ; print len bytes of label to the console
     ldx #0                                          ; start at the first byte
-:   lda a:label,x                                   ; ROM text requires absolute addressing
+:   lda a:.loword(label),x                          ; ROM text uses a 16-bit absolute address
     jsr tx_char                                     ; send it to the console
     inx                                             ; move to the next byte
     cpx #len                                        ; reached the end of the text?
