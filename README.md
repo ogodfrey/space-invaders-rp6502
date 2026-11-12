@@ -4,6 +4,9 @@ A staged port of Space Invaders to the Picocomputer 6502 (RP6502), written in
 cc65 assembly. The Apple II version lives in [apple2/](apple2/) for reference
 and is not part of the RP6502 build.
 
+The RP6502 was created by Rumbledethumps. Learn about the Picocomputer and its
+SDK at [picocomputer.github.io](https://picocomputer.github.io/).
+
 ## Layout
 
 * `src/main-cc65.s`: the game, in cc65 assembly.
