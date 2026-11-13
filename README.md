@@ -40,6 +40,9 @@ from the title screen or takes over the attract demo. The score line is VGA
 console text on a plane above the bitmap. The high score lasts only for the
 session.
 
+Gameplay keeps the HUD free of control instructions. The attract screens
+center the title, start prompt, alien point values, and session high score.
+
 Known gaps against the arcade: the attract demo is a sweep-and-fire
 autopilot, not a full copy of the arcade demo, and the high score is not
 saved between runs.

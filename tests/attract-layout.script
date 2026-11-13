@@ -1,0 +1,34 @@
+run 30
+expect console "\x1b[11;14HSPACE INVADERS"
+expect console "\x1b[14;8HPRESS SPACE OR PAD A/START"
+expect console "\x1b[17;13H30 POINTS  SQUID"
+expect console "\x1b[19;13H20 POINTS  CRAB"
+expect console "\x1b[21;12H10 POINTS  OCTOPUS"
+expect console "\x1b[23;12H? MYSTERY  SAUCER"
+poke attract_timer 1
+run 1
+expect console "\x1b[10;16HHIGH SCORE"
+expect console "\x1b[12;20H0"
+expect console "\x1b[14;8HPRESS SPACE OR PAD A/START"
+poke hi_lo 10
+poke attract_phase 0
+poke attract_timer 1
+run 1
+expect console "\x1b[12;20H10"
+poke hi_lo 100
+poke attract_phase 0
+poke attract_timer 1
+run 1
+expect console "\x1b[12;19H100"
+poke hi_lo 232
+poke hi_hi 3
+poke attract_phase 0
+poke attract_timer 1
+run 1
+expect console "\x1b[12;19H1000"
+poke hi_lo 255
+poke hi_hi 255
+poke attract_phase 0
+poke attract_timer 1
+run 1
+expect console "\x1b[12;18H65535"

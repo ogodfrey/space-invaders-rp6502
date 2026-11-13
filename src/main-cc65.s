@@ -80,9 +80,6 @@ ALIEN_STEP_FRAMES    = 16                           ; frames between alien steps
 str_title:                                          ; HUD title text label
     .byte "SPACE INVADERS     SCORE: "              ; title, then the score digits
 str_title_len = * - str_title                       ; length of the title text
-str_help:                                           ; control hint text label
-    .byte "A/D, arrows or pad move; Space/A fires"  ; control hint shown under the title
-str_help_len = * - str_help                         ; length of the hint text
 str_lives:                                          ; lives label text
     .byte "LIVES "                                  ; label shown before the count
 str_lives_len = * - str_lives                       ; length of the label
@@ -521,12 +518,6 @@ _main:                                              ; program entry point
     lda #$0C                                        ; form feed clears the console
     jsr tx_char                                     ; send it
     jsr draw_score                                  ; draw the title and score
-    lda #1                                          ; second row of the console
-    sta cur_row                                     ; set the row
-    lda #0                                          ; first column
-    sta cur_col                                     ; set the column
-    jsr goto_xy                                     ; move the cursor there
-    PUT_STR str_help, str_help_len                  ; print the control hint
     jsr draw_grid                                   ; draw the alien grid
     jsr draw_player                                 ; draw the player
     lda RIA_VSYNC                                   ; read the current VSYNC count
@@ -1627,37 +1618,37 @@ enter_title:                                        ; the title screen
     jsr tx_char                                     ; send it
     lda #10                                         ; title row
     sta cur_row                                     ; set the row
-    lda #14                                         ; title column
+    lda #((40 - str_name_len) / 2)                  ; centered title column
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_name, str_name_len                  ; print the game name
     lda #13                                         ; prompt row
     sta cur_row                                     ; set the row
-    lda #10                                         ; prompt column
+    lda #((40 - str_press_len) / 2)                 ; centered prompt column
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_press, str_press_len                ; print the prompt
     lda #16                                         ; the point table starts here
     sta cur_row                                     ; set the row
-    lda #8                                          ; and this column
+    lda #((40 - str_pts_squid_len) / 2)             ; centered point value
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_pts_squid, str_pts_squid_len        ; the squid is worth 30
     lda #18                                         ; the next line
     sta cur_row                                     ; set the row
-    lda #8                                          ; same column
+    lda #((40 - str_pts_crab_len) / 2)              ; centered point value
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_pts_crab, str_pts_crab_len          ; the crab is worth 20
     lda #20                                         ; the next line
     sta cur_row                                     ; set the row
-    lda #8                                          ; same column
+    lda #((40 - str_pts_octo_len) / 2)              ; centered point value
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_pts_octo, str_pts_octo_len          ; the octopus is worth 10
     lda #22                                         ; the last line
     sta cur_row                                     ; set the row
-    lda #8                                          ; same column
+    lda #((40 - str_pts_ufo_len) / 2)               ; centered point value
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_pts_ufo, str_pts_ufo_len            ; the saucer's points vary
@@ -1785,12 +1776,6 @@ new_game:                                           ; start a game
     lda #$0C                                        ; form feed clears the title
     jsr tx_char                                     ; send it
     jsr draw_score                                  ; the title and score
-    lda #1                                          ; second row
-    sta cur_row                                     ; set the row
-    lda #0                                          ; first column
-    sta cur_col                                     ; set the column
-    jsr goto_xy                                     ; move the cursor there
-    PUT_STR str_help, str_help_len                  ; print the control hint
     jsr draw_lives                                  ; show the ship count
     jsr draw_player                                 ; draw the ship
     jsr draw_wave                                   ; show the wave number
@@ -1962,19 +1947,36 @@ draw_hiscore:                                       ; the high-score attract scr
     jsr tx_char                                     ; send it
     lda #9                                          ; the label's row
     sta cur_row                                     ; set the row
-    lda #14                                         ; the label's column
+    lda #((40 - str_hiscore_len) / 2)               ; centered label column
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_hiscore, str_hiscore_len            ; print the label
     lda #11                                         ; the score's row
     sta cur_row                                     ; set the row
-    lda #16                                         ; the score's column
+    ldx #0
+@digits:
+    lda hi_hi
+    cmp div_hi,x
+    bcc @shorter
+    bne @center
+    lda hi_lo
+    cmp div_lo,x
+    bcs @center
+@shorter:
+    inx
+    cpx #4
+    bne @digits
+@center:
+    txa
+    clc
+    adc #35                                         ; 40 columns minus (5 - X) digits
+    lsr a
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     jsr print_hi                                    ; print the best score
     lda #13                                         ; the prompt's row
     sta cur_row                                     ; set the row
-    lda #10                                         ; the prompt's column
+    lda #((40 - str_press_len) / 2)                 ; centered prompt column
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     PUT_STR str_press, str_press_len                ; print the prompt

@@ -40,6 +40,10 @@ rp6502_test(NAME attract COMMAND tests/attract.script # the title screen alterna
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME attract-layout COMMAND tests/attract-layout.script
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>
+)
+
 rp6502_test(NAME high-score COMMAND tests/high-score.script # a game's score becomes the best if it beats it
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
