@@ -1,7 +1,7 @@
 # Space Invaders for the RP6502: project notes
 
-Handoff notes from the planning session. They summarize the RP6502 docs at
-https://picocomputer.github.io/ that matter for porting the game. Check the
+Handoff notes from the planning session. They summarize the [RP6502 docs](https://picocomputer.github.io/)
+that matter for porting the game. Check the
 docs before you rely on any detail here.
 
 ## Project state
