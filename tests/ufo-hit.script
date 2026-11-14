@@ -17,3 +17,6 @@ run 2                                               # the bullet moves up into t
 peek ufo_active 0                                   # the saucer is hit and gone
 peek bullet_active 0                                # the bullet is used up
 peek score 100                                      # the first shot is worth 100 points
+peek xram:(XRAM_PSG+30) 0                          # saucer flight sound stopped
+peek xram:(XRAM_PSG+46) 1                          # distinct saucer-hit channel is gated
+wait xram:(XRAM_PSG+46) 0 50                       # the effect releases

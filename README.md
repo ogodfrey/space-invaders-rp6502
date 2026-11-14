@@ -30,7 +30,8 @@ with the vertical positions scaled from 256 lines to 240.
   destructible bunkers.
 * A bonus saucer that crosses the top of the screen.
 * Explosion bursts for hits and for the ship's destruction.
-* PSG sound: shot, explosion, saucer, bomb launch, and the marching bassline.
+* PSG sound: fleet-synchronized thumps, shot, saucer, separate alien,
+  saucer and ship hit effects, and the bonus-ship sound.
 * Title, play, wave-clear, and game-over states, a session high score, and
   an attract demo where an autopilot plays after the high-score screen.
 
@@ -45,7 +46,8 @@ center the title, start prompt, alien point values, and session high score.
 
 Known gaps against the arcade: the attract demo is a sweep-and-fire
 autopilot, not a full copy of the arcade demo, and the high score is not
-saved between runs.
+saved between runs. Sound effects are PSG approximations rather than a
+simulation of the arcade's analog circuits; PCM playback is not used.
 
 ## Build
 

@@ -1,0 +1,34 @@
+run 30
+press space
+run 1
+release space
+run 2
+poke alien_timer 53
+run 1
+peek bass_idx 0                                      # no thump before the fleet step
+peek xram:(XRAM_PSG+22) 0
+run 1
+peek bass_idx 1                                      # the first step plays the first thump
+peek xram:(XRAM_PSG+22) 1
+run 2
+peek xram:(XRAM_PSG+22) 0                           # the short thump releases
+poke alien_timer 54
+run 1
+peek bass_idx 2                                      # the next step advances the sequence
+press space
+wait xram:(XRAM_PSG+6) 1 20                        # wait for the shot to start
+release space
+peek xram:(XRAM_PSG+6) 1                            # a shot can overlap the fleet
+poke ufo_wait_lo 0
+poke ufo_wait_hi 0
+run 1
+peek xram:(XRAM_PSG+30) 1                           # the saucer flies while the shot plays
+peek xram:(XRAM_PSG+6) 1
+peek xram:(XRAM_PSG+24) 70 5                       # saucer starts at 1350 / 3 Hz
+run 1
+peek xram:(XRAM_PSG+24) 100 5                      # the frequency changes on the next frame
+poke grid_alive 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+run 1
+peek game_state 2                                    # wave pause
+peek xram:(XRAM_PSG+30) 0                           # no sustained saucer tone in the pause
+wait xram:(XRAM_PSG+6) 0 30                        # shot completes during the pause

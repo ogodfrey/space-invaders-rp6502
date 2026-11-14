@@ -6,5 +6,4 @@ run 2                                               # let the first frame of pla
 poke fire_timer 59                                  # the aliens are one frame from firing
 run 2                                               # the alien fire check runs
 peek bomb_active 1                                  # a bomb is launched in slot 0
-wait bomb_snd 0 20                                  # its launch sound runs out
-peek bomb_snd 0                                     # the sound is over
+peek xram:(XRAM_PSG+38) 0                          # alien fire does not trigger a launch sound

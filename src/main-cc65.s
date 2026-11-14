@@ -51,18 +51,9 @@ UFO_STEP_U           = 2                            ; saucer move per step, in 2
 UFO_STEP_FRAMES      = 3                            ; frames between saucer steps (tuning)
 UFO_RIGHT_U          = 152                          ; the saucer leaves the screen past this x
 UFO_BASE_FRAMES      = 900                          ; shortest wait before the next saucer (15 s at 60 Hz)
-SND_SHOT_LO          = $B8                          ; the player's shot starts at 1000 Hz (3000 in 1/3 Hz), low byte
-SND_SHOT_HI          = $0B                          ; high byte
-SND_SHOT_STEP        = 300                          ; the shot's pitch falls 100 Hz per frame (in 1/3 Hz)
 SND_SHOT_FRAMES      = 8                            ; frames the shot sound lasts
 SND_EXPL_LO          = $8C                          ; explosion noise rate: 900 (in 1/3 Hz), low byte
 SND_EXPL_HI          = $0A                          ; high byte
-SND_UFO_LO           = $DC                          ; saucer tone: 500 Hz (1500 in 1/3 Hz), low byte
-SND_UFO_HI           = $05                          ; high byte
-SND_UFO2_LO          = $72                          ; the warble's other pitch: 550 Hz (1650 in 1/3 Hz), low byte
-SND_UFO2_HI          = $06                          ; high byte
-SND_BOMB_LO          = $94                          ; bomb launch tone: 660 Hz (1980 in 1/3 Hz), low byte
-SND_BOMB_HI          = $07                          ; high byte
 GRID_DROP_PY         = 8                            ; rows the grid drops at each screen edge, in pixels
 STATE_TITLE          = 0                            ; title screen: waiting for Space to start
 STATE_PLAY           = 1                            ; playing a wave
@@ -140,6 +131,17 @@ bass_lo:
     .byte $26, $14, $05, $F6                        ; low bytes of the four notes
 bass_hi:
     .byte $01, $01, $01, $00                        ; high bytes of the four notes
+; Frequency units are 1/3 Hz. Tables are stepped once per video frame.
+shot_freq_lo:
+    .lobytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000
+shot_freq_hi:
+    .hibytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000
+ufo_freq_lo:
+    .lobytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560
+    .lobytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380
+ufo_freq_hi:
+    .hibytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560
+    .hibytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380
 ufo_pts_hi:
     .byte 0, 0, 0, 0, 0, 0, 0, 0                    ; 300 needs the high byte
     .byte 1, 0, 0, 0, 0, 0, 0, 0
@@ -358,7 +360,6 @@ demo_dir:      .res 1                               ; autopilot direction: 0 = l
 demo_fire:     .res 1                               ; 1 when the autopilot asks for a shot this frame
 demo_left:     .res 2                               ; frames left in the demo, low byte then high byte
 bomb_iv:       .res 1                               ; frames between bomb steps this wave
-bomb_snd:      .res 1                               ; frames left in the bomb's launch sound
 hi_lo:         .res 1                               ; best score this session, low byte
 hi_hi:         .res 1                               ; best score this session, high byte
 attract_phase: .res 1                               ; 0 = title screen, 1 = high-score screen
@@ -371,12 +372,8 @@ ps_off:        .res 1                               ; PSG channel byte offset (0
 ps_lo:         .res 1                               ; frequency low byte for psg_set_freq
 ps_hi:         .res 1                               ; frequency high byte for psg_set_freq
 ps_gate:       .res 1                               ; gate byte for psg_set_gate
-shot_lo:       .res 1                               ; the shot's current frequency, low byte
-shot_hi:       .res 1                               ; high byte
-shot_frames:   .res 1                               ; frames left in the shot sound
-expl_frames:   .res 1                               ; frames left in the explosion sound
-bass_timer:    .res 1                               ; frames until the next bassline note
 bass_idx:      .res 1                               ; which bassline note is next, 0 to 3
+effect_frames: .res 8                               ; per-channel gate timers
 bullet_active: .res 1                               ; 1 while a bullet is in flight
 bullet_u:      .res 1                               ; bullet x, in 2-pixel units
 bullet_y:      .res 1                               ; bullet top row, in pixels
@@ -557,6 +554,7 @@ main_loop:                                          ; one pass per video frame
     jsr title_frame                                 ; wait for Space to start
     jmp main_loop                                   ; next frame
 @timed:                                             ; a wave-clear or game-over pause
+    jsr update_sound                                ; let transient effects finish during pauses
     jsr timed_frame                                 ; count it down
     jmp main_loop                                   ; next frame
 @play:                                              ; the game is running
@@ -1057,8 +1055,8 @@ check_hits:                                         ; bullet vs grid
     lda #0                                          ; the alien is no longer alive
     sta grid_alive,x                                ; store the flag
     dec alive_count                                 ; one alien fewer: the bassline speeds up
-    lda #12                                         ; explosion length in frames
-    jsr snd_explode                                 ; play the explosion
+    jsr snd_alien_hit                               ; play the alien hit
+    ldx grid_i                                      ; sound routines use X
     lda grid_points,x                               ; points for this alien's row
     clc                                             ; prepare to add
     adc score                                       ; add to the score's low byte
@@ -1143,6 +1141,7 @@ update_grid:                                        ; move the alien grid
     bne @alive                                      ; some alien is alive: move the grid
     rts                                             ; none left: nothing to move
 @alive:                                             ; the grid has living aliens
+    jsr snd_march                                   ; one thump for each fleet step
     jsr erase_grid                                  ; erase the grid at its old position
     lda alien_frame                                 ; current animation frame
     eor #1                                          ; flip between 0 and 1
@@ -1279,17 +1278,6 @@ alien_fire:                                         ; maybe launch an alien bomb
     sta bomb_y,x                                    ; store the bomb's top row
     lda #1                                          ; the slot is in use
     sta bomb_active,x                               ; mark it active
-    lda #6                                          ; the launch sound lasts 6 frames
-    sta bomb_snd                                    ; start its countdown
-    lda #32                                         ; channel 4
-    sta ps_off                                      ; select it
-    lda #SND_BOMB_LO                                ; launch tone, low byte
-    sta ps_lo                                       ; for the write
-    lda #SND_BOMB_HI                                ; high byte
-    sta ps_hi                                       ; for the write
-    jsr psg_set_freq                                ; set the pitch
-    lda #1                                          ; gate on
-    jsr psg_set_gate                                ; start it
     rts                                             ; return
 
 ; Draws the bomb in slot bomb_slot at its position.
@@ -1489,8 +1477,7 @@ player_die:                                         ; destroy the ship
     jsr spawn_explosion                             ; show the right half
     lda #1                                          ; the ship is destroyed
     sta player_dead                                 ; mark it
-    lda #40                                         ; a long explosion for the ship
-    jsr snd_explode                                 ; play it
+    jsr snd_explode                                 ; play the ship explosion
     lda #DEATH_FRAMES                               ; the pause length
     sta death_timer                                 ; start the pause
     jsr draw_lives                                  ; show the new ship count
@@ -1762,12 +1749,9 @@ new_game:                                           ; start a game
     sta bomb_timer                                  ; reset the bomb timer
     sta shots_fired                                 ; a new game counts its shots from zero
     sta extra_given                                 ; no extra ship awarded yet this game
-    lda #1                                          ; the first bassline note is due at once
-    sta bass_timer                                  ; start the bassline clock
+    jsr snd_silence                                 ; stop effects from the previous game or demo
     lda #0                                          ; the bassline starts at its first note
     sta bass_idx                                    ; store the index
-    sta shot_frames                                 ; no shot sounding
-    sta expl_frames                                 ; no explosion sounding
     sta ufo_active                                  ; no saucer at the start
     lda #(256-UFO_STEP_U)                           ; the first saucer goes left, so the first flips it right
     sta ufo_dir                                     ; store the direction
@@ -1864,6 +1848,7 @@ play_check:                                         ; check for a cleared wave o
     bne @some_alive                                 ; some aliens are alive
     lda #STATE_WAVE                                 ; no aliens left: the wave is cleared
     sta game_state                                  ; store the state
+    jsr snd_ufo_off                                 ; no continuous tone during the pause
     lda #WAVE_PAUSE_FRAMES                          ; the pause length
     sta state_timer                                 ; start it
     rts                                             ; return
@@ -1887,6 +1872,7 @@ game_over:                                          ; the last ship is lost, or 
 @no_record:                                         ; the score is settled
     lda #STATE_OVER                                 ; the game-over screen
     sta game_state                                  ; store the state
+    jsr snd_ufo_off                                 ; stop the saucer while the game is over
     lda #OVER_FRAMES                                ; how long it stays up
     sta state_timer                                 ; start the countdown
     jmp show_game_over                              ; print the message
@@ -2020,6 +2006,7 @@ check_extra_ship:                                   ; the 1500-point ship
     lda #1                                          ; mark it awarded
     sta extra_given                                 ; store the flag
     inc lives                                       ; one more ship
+    jsr snd_bonus                                   ; arcade bonus-base signal
     jmp draw_lives                                  ; show it
 @done:                                              ; nothing to award
     rts                                             ; return
@@ -2069,11 +2056,13 @@ draw_wave:                                          ; WAVE n on the second row
 ; Maps the PSG, gives each effect its envelope, and silences every channel.
 sound_init:                                         ; set up the PSG
     xreg_ria_psg XRAM_PSG                           ; map the PSG to XRAM
-    PSG_ENV 0, $32, $30, $16                        ; shot: square, attack level 3 (quiet), release rate 6
-    PSG_ENV 1, $32, $A8, $48                        ; explosion: noise, decays to level 10 and fades quickly
-    PSG_ENV 2, $32, $30, $12                        ; bassline: square, level 3, short release
-    PSG_ENV 3, $32, $30, $34                        ; saucer: triangle, level 3, release rate 4
-    PSG_ENV 4, $32, $30, $18                        ; alien bomb launch: square, level 3, release rate 8
+    PSG_ENV 0, $80, $88, $13                        ; shot
+    PSG_ENV 1, $60, $98, $46                        ; ship explosion
+    PSG_ENV 2, $80, $88, $02                        ; fleet thump, sine
+    PSG_ENV 3, $90, $90, $12                        ; saucer
+    PSG_ENV 4, $80, $A8, $43                        ; alien hit, noise
+    PSG_ENV 5, $80, $98, $23                        ; saucer hit, sawtooth
+    PSG_ENV 6, $80, $88, $12                        ; bonus ship
     jmp snd_silence                                 ; no sound yet
 
 ; Writes the frequency in ps_lo and ps_hi to the channel at ps_off.
@@ -2110,180 +2099,198 @@ psg_set_gate:                                       ; set a channel's gate
     sta RIA_RW0                                     ; write it
     rts                                             ; return
 
-sound_offs:                                         ; byte offsets of channels 0 to 3
-    .byte 0, 8, 16, 24
+sound_offs:
+    .byte 0, 8, 16, 24, 32, 40, 48, 56
 
-; Releases channels 0 to 3 and stops the effects.
-snd_silence:                                        ; silence the effects
-    lda #0                                          ; no shot sounding
-    sta shot_frames                                 ; clear its count
-    sta expl_frames                                 ; no explosion sounding
-    ldx #3                                          ; start at channel 3
-@off:                                               ; release one channel
-    lda sound_offs,x                                ; its offset
-    sta ps_off                                      ; select it
-    lda #0                                          ; gate off
-    jsr psg_set_gate                                ; write it
-    dex                                             ; the previous channel
-    bpl @off                                        ; until channel 0 is released
-    rts                                             ; return
+; X is the channel, A is its gate duration, and ps_lo/ps_hi are its frequency.
+snd_start:
+    sta effect_frames,x
+    lda sound_offs,x
+    sta ps_off
+    lda #0
+    jsr psg_set_gate
+    jsr psg_set_freq
+    lda #1
+    jmp psg_set_gate
 
-; The player's shot: a tone that falls from 1000 Hz on channel 0.
-snd_shot:                                           ; start the shot sound
-    lda #SND_SHOT_LO                                ; start frequency, low byte
-    sta shot_lo                                     ; keep it for the slide
-    lda #SND_SHOT_HI                                ; high byte
-    sta shot_hi                                     ; keep it
-    lda #SND_SHOT_FRAMES                            ; how long it lasts
-    sta shot_frames                                 ; start the countdown
-    lda #0                                          ; channel 0
-    sta ps_off                                      ; select it
-    lda shot_lo                                     ; frequency low byte
-    sta ps_lo                                       ; for the write
-    lda shot_hi                                     ; frequency high byte
-    sta ps_hi                                       ; for the write
-    jsr psg_set_freq                                ; set the pitch
-    lda #1                                          ; gate on: start the note
-    jmp psg_set_gate                                ; and return
+snd_silence:
+    ldx #7
+@off:
+    lda #0
+    sta effect_frames,x
+    lda sound_offs,x
+    sta ps_off
+    lda #0
+    jsr psg_set_gate
+    dex
+    bpl @off
+    rts
 
-; Starts the explosion noise on channel 1 for A frames.
-snd_explode:                                        ; start the explosion
-    sta expl_frames                                 ; how long it lasts
-    lda #SND_EXPL_LO                                ; noise rate, low byte
-    sta ps_lo                                       ; for the write
-    lda #SND_EXPL_HI                                ; high byte
-    sta ps_hi                                       ; for the write
-    lda #8                                          ; channel 1
-    sta ps_off                                      ; select it
-    jsr psg_set_freq                                ; set the rate
-    lda #1                                          ; gate on
-    jmp psg_set_gate                                ; start it
+snd_shot:
+    lda #<3000
+    sta ps_lo
+    lda #>3000
+    sta ps_hi
+    ldx #0
+    lda #SND_SHOT_FRAMES
+    jmp snd_start
 
-; The saucer's tone on channel 3, and its silence.
-snd_ufo_on:                                         ; the saucer's tone
-    lda #SND_UFO_LO                                 ; 500 Hz, low byte
-    sta ps_lo                                       ; for the write
-    lda #SND_UFO_HI                                 ; high byte
-    sta ps_hi                                       ; for the write
-    lda #24                                         ; channel 3
-    sta ps_off                                      ; select it
-    jsr psg_set_freq                                ; set the pitch
-    lda #1                                          ; gate on
-    jmp psg_set_gate                                ; start it
+snd_explode:
+    lda #SND_EXPL_LO
+    sta ps_lo
+    lda #SND_EXPL_HI
+    sta ps_hi
+    ldx #1
+    lda #40
+    jmp snd_start
 
-snd_ufo_off:                                        ; the saucer's tone stops
-    lda #24                                         ; channel 3
-    sta ps_off                                      ; select it
-    lda #0                                          ; gate off
-    jmp psg_set_gate                                ; release it
+snd_march:
+    ldx bass_idx
+    lda bass_lo,x
+    sta ps_lo
+    lda bass_hi,x
+    sta ps_hi
+    inx
+    txa
+    and #3
+    sta bass_idx
+    ldx #2
+    lda #2
+    jmp snd_start
 
-; While the saucer crosses, its tone alternates between two pitches every 8
-; frames, which gives the arcade's warble.
-update_warble:                                      ; the saucer's warble on channel 3
-    lda ufo_active                                  ; is the saucer crossing?
-    beq @done                                       ; no
-    inc ufo_warble                                  ; one frame of the warble
-    lda ufo_warble                                  ; the frame count
-    and #7                                          ; every 8 frames
-    bne @done                                       ; not yet
-    lda ufo_warble                                  ; the frame count again
-    and #8                                          ; which of the two pitches?
-    bne @high                                       ; the upper pitch
-    lda #SND_UFO_LO                                 ; the lower pitch, low byte
-    sta ps_lo                                       ; for the write
-    lda #SND_UFO_HI                                 ; high byte
-    jmp @write                                      ; send it
-@high:                                              ; the upper pitch
-    lda #SND_UFO2_LO                                ; low byte
-    sta ps_lo                                       ; for the write
-    lda #SND_UFO2_HI                                ; high byte
-@write:                                             ; A is the high byte
-    sta ps_hi                                       ; for the write
-    lda #24                                         ; channel 3
-    sta ps_off                                      ; select it
-    jmp psg_set_freq                                ; set the pitch and return
-@done:                                              ; nothing to change this frame
-    rts                                             ; return
+snd_ufo_on:
+    lda #0
+    sta ufo_warble
+    lda #<1350
+    sta ps_lo
+    lda #>1350
+    sta ps_hi
+    ldx #3
+    lda #0                                          ; continuous until explicitly stopped
+    jmp snd_start
 
-; Per frame: the shot's falling pitch, the explosion's end, and the bassline.
-update_sound:                                       ; sound for one frame
-    jsr update_warble                               ; the saucer's warble
-    lda shot_frames                                 ; is the shot sounding?
-    beq @explosion                                  ; no
-    dec shot_frames                                 ; one frame of it
-    bne @slide                                      ; still going: slide the pitch down
-    lda #0                                          ; the shot is over
-    sta ps_off                                      ; channel 0
-    lda #0                                          ; gate off: release it
-    jsr psg_set_gate                                ; write it
-    jmp @explosion                                  ; next effect
-@slide:                                             ; the pitch falls
-    sec                                             ; set carry for subtraction
-    lda shot_lo                                     ; low byte
-    sbc #<SND_SHOT_STEP                             ; subtract the step, low byte
-    sta shot_lo                                     ; store it
-    lda shot_hi                                     ; high byte
-    sbc #>SND_SHOT_STEP                             ; subtract the step, high byte with borrow
-    sta shot_hi                                     ; store it
-    lda #0                                          ; channel 0
-    sta ps_off                                      ; select it
-    lda shot_lo                                     ; frequency low byte
-    sta ps_lo                                       ; for the write
-    lda shot_hi                                     ; frequency high byte
-    sta ps_hi                                       ; for the write
-    jsr psg_set_freq                                ; set the new pitch
-@explosion:                                         ; the explosion on channel 1
-    lda expl_frames                                 ; is it sounding?
-    beq @bass                                       ; no
-    dec expl_frames                                 ; one frame of it
-    bne @bass                                       ; still going
-    lda #8                                          ; channel 1
-    sta ps_off                                      ; select it
-    lda #0                                          ; gate off: release it
-    jsr psg_set_gate                                ; write it
-@bass:                                              ; the bassline on channel 2
-    lda bomb_snd                                    ; is the bomb launch sounding?
-    beq @bass_check                                 ; no
-    dec bomb_snd                                    ; one frame of it
-    bne @bass_check                                 ; still going
-    lda #32                                         ; channel 4
-    sta ps_off                                      ; select it
-    lda #0                                          ; gate off
-    jsr psg_set_gate                                ; release it
-@bass_check:                                        ; the bassline checks the ship
-    lda player_dead                                 ; is the ship destroyed?
-    beq @bass_on                                    ; no: the bassline plays
-    lda #16                                         ; channel 2
-    sta ps_off                                      ; select it
-    lda #0                                          ; silence it while the ship is down
-    jmp psg_set_gate                                ; gate off and return
-@bass_on:                                           ; the bassline plays
-    dec bass_timer                                  ; one frame until the next note
-    beq @note                                       ; time for a note
-    rts                                             ; wait
-@note:                                              ; the next bassline note
-    lda alive_count                                 ; the living aliens
-    lsr a                                           ; divide by 4: fewer aliens, faster notes
-    lsr a                                           ; second halving
-    clc                                             ; prepare to add
-    adc #3                                          ; at least 3 frames per note
-    sta bass_timer                                  ; store the interval
-    lda #16                                         ; channel 2
-    sta ps_off                                      ; select it
-    ldx bass_idx                                    ; the note index
-    lda bass_lo,x                                   ; the note's low byte
-    sta ps_lo                                       ; for the write
-    lda bass_hi,x                                   ; the note's high byte
-    sta ps_hi                                       ; for the write
-    inx                                             ; the next note
-    txa                                             ; its index
-    and #3                                          ; wrap after four notes
-    sta bass_idx                                    ; store it
-    lda #0                                          ; release the previous note first
-    jsr psg_set_gate                                ; gate off
-    jsr psg_set_freq                                ; set the new note's pitch
-    lda #1                                          ; then start it
-    jmp psg_set_gate                                ; gate on
+snd_ufo_off:
+    lda #24
+    sta ps_off
+    lda #0
+    jmp psg_set_gate
+
+snd_alien_hit:
+    lda #<4500
+    sta ps_lo
+    lda #>4500
+    sta ps_hi
+    ldx #4
+    lda #8
+    jmp snd_start
+
+snd_saucer_hit:
+    lda #<1800
+    sta ps_lo
+    lda #>1800
+    sta ps_hi
+    ldx #5
+    lda #24
+    jmp snd_start
+
+snd_bonus:
+    lda #<2100
+    sta ps_lo
+    lda #>2100
+    sta ps_hi
+    ldx #6
+    lda #30
+    jmp snd_start
+
+; Advance every transient even during wave and game-over pauses.
+update_sound:
+    ldx #6
+@timers:
+    lda effect_frames,x
+    beq @next
+    dec effect_frames,x
+    bne @next
+    lda sound_offs,x
+    sta ps_off
+    lda #0
+    jsr psg_set_gate
+@next:
+    dex
+    bpl @timers
+    lda effect_frames
+    beq @explosion
+    tax
+    dex
+    lda shot_freq_lo,x
+    sta ps_lo
+    lda shot_freq_hi,x
+    sta ps_hi
+    lda #0
+    sta ps_off
+    jsr psg_set_freq
+@explosion:
+    lda effect_frames+1
+    beq @saucer_hit
+    lsr a
+    lsr a
+    lsr a
+    clc
+    adc #4
+    sta ps_hi
+    lda #0
+    sta ps_lo
+    lda #8
+    sta ps_off
+    jsr psg_set_freq
+@saucer_hit:
+    lda effect_frames+5
+    beq @bonus
+    and #15
+    tax
+    lda ufo_freq_lo,x
+    sta ps_lo
+    lda ufo_freq_hi,x
+    sta ps_hi
+    lda #40
+    sta ps_off
+    jsr psg_set_freq
+@bonus:
+    lda effect_frames+6
+    beq @warble
+    and #4
+    beq @bonus_low
+    lda #<2400
+    sta ps_lo
+    lda #>2400
+    bne @bonus_write
+@bonus_low:
+    lda #<1800
+    sta ps_lo
+    lda #>1800
+@bonus_write:
+    sta ps_hi
+    lda #48
+    sta ps_off
+    jsr psg_set_freq
+@warble:
+    lda game_state
+    cmp #STATE_PLAY
+    bne @done
+    lda ufo_active
+    beq @done
+    inc ufo_warble
+    lda ufo_warble
+    and #15
+    tax
+    lda ufo_freq_lo,x
+    sta ps_lo
+    lda ufo_freq_hi,x
+    sta ps_hi
+    lda #24
+    sta ps_off
+    jmp psg_set_freq
+@done:
+    rts
 
 ; ---- bonus saucer ----
 
@@ -2395,8 +2402,7 @@ check_ufo:                                          ; the bullet against the sau
     sbc ufo_x                                       ; distance from the saucer's left edge
     cmp #8                                          ; within its 8 units?
     bcs @miss                                       ; no
-    lda #12                                         ; explosion length in frames
-    jsr snd_explode                                 ; play the explosion
+    jsr snd_saucer_hit                              ; play the saucer hit
     jsr erase_ufo                                   ; the saucer is hit
     lda ufo_x                                       ; the saucer's x
     clc                                             ; prepare to add

@@ -36,6 +36,10 @@ rp6502_test(NAME sound-shot COMMAND tests/sound-shot.script # the shot sound gat
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
+rp6502_test(NAME sound-timing COMMAND tests/sound-timing.script
+    $<TARGET_PROPERTY:space-invaders,RP6502_ROM>
+)
+
 rp6502_test(NAME attract COMMAND tests/attract.script # the title screen alternates with the high-score screen
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
@@ -76,7 +80,7 @@ rp6502_test(NAME explosions COMMAND tests/explosions.script # hits and ship deat
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 
-rp6502_test(NAME bomb-launch COMMAND tests/bomb-launch.script # an alien bomb is launched and its sound runs out
+rp6502_test(NAME bomb-launch COMMAND tests/bomb-launch.script # an alien bomb launches without a sound
     $<TARGET_PROPERTY:space-invaders,RP6502_ROM>    # the ROM under test
 )
 

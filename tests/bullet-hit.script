@@ -11,3 +11,5 @@ poke bullet_active 1                                # the bullet is in flight
 run 2                                               # the bullet moves up and hits the bottom row
 peek grid_alive+49 0                                # alien 49 (bottom row, column 5) is gone
 peek score 10                                       # a bottom-row alien is worth 10 points
+peek xram:(XRAM_PSG+38) 1                          # alien-hit channel is gated
+wait xram:(XRAM_PSG+38) 0 30                       # the effect releases
