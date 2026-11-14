@@ -10,7 +10,7 @@ run 20                                              # two bomb steps: the bomb h
 peek lives 2                                        # one ship was lost
 peek player_dead 1                                  # the game is paused
 peek bomb_active 0                                  # the bomb is gone
-peek xram:(XRAM_PSG+14) 1                          # ship explosion uses its own channel
+peek xram:(XRAM_PSG+14) (1-PCM_ENABLED)            # PSG explosion is disabled in PCM builds
 run 110                                             # still inside the 120-frame pause
 peek player_dead 1                                  # still paused
 run 20                                              # the pause ends

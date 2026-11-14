@@ -47,7 +47,29 @@ center the title, start prompt, alien point values, and session high score.
 Known gaps against the arcade: the attract demo is a sweep-and-fire
 autopilot, not a full copy of the arcade demo, and the high score is not
 saved between runs. Sound effects are PSG approximations rather than a
-simulation of the arcade's analog circuits. The game itself does not use PCM.
+simulation of the arcade's analog circuits. The default game uses PSG only
+and remains compatible with RP6502 0.42.
+
+## PCM-enabled game
+
+The optional RP6502 0.43 build uses the auditioned PCM shot and ship
+explosion alongside the existing PSG effects. The two samples are mixed
+together as centered mono, with headroom for the other effects. PCM playback
+uses a small nonblocking queue; restarting a voice does not cancel the other.
+If the PCM device cannot be opened or fails, the game reports an error and
+stops rather than silently playing without sound.
+
+Configure a separate build to keep the default 0.42 build unchanged:
+
+    cmake --preset cc65/Debug -B build/cc65/game-pcm -DENABLE_PCM_SOUND=ON
+    cmake --build build/cc65/game-pcm
+    ctest --test-dir build/cc65/game-pcm --output-on-failure
+
+The resulting ROM is
+`build/cc65/game-pcm/space-invaders/space-invaders.rp6502`. It requires
+RP6502 0.43 or newer. The samples are generated at build time as 8 kHz,
+8-bit mono and are twice the prototype's amplitude before quantization.
+Sound quality and relative loudness still need listening tests on hardware.
 
 ## PCM sound experiment
 

@@ -6,6 +6,13 @@
 
 .include "rp6502.inc"                               ; RIA and VGA register names
 .include "xram.inc"                                 ; XRAM layout and Mode 3 definitions
+.ifdef ENABLE_PCM_SOUND                             ; the optional 0.43 sound path
+.import pcm_init, pcm_pump, pcm_shot, pcm_explosion, pcm_stop ; mixer entry points
+.export tx_char                                     ; mixer errors use the console
+PCM_ENABLED = 1                                     ; tests can identify the PCM build
+.else                                               ; the original PSG-only build
+PCM_ENABLED = 0                                     ; tests can identify the PSG build
+.endif                                              ; end of optional mixer declarations
 
 CANVAS_320X240       = 1                            ; VGA canvas selector for 320x240
 
@@ -538,6 +545,9 @@ _main:                                              ; program entry point
     lda #RNG_SEED                                   ; nonzero seed
     sta rng                                         ; store the generator state
     jsr draw_lives                                  ; show the ship count
+.ifdef ENABLE_PCM_SOUND                             ; initialize the optional PCM stream
+    jsr pcm_init                                    ; report an error if PCM cannot open
+.endif                                              ; end of optional PCM initialization
     jsr sound_init                                  ; map the PSG and silence it
     jsr enter_title                                 ; start on the title screen
 
@@ -546,6 +556,9 @@ main_loop:                                          ; one pass per video frame
     cmp last_vsync                                  ; has a new frame started?
     beq main_loop                                   ; no: keep waiting
     sta last_vsync                                  ; yes: remember this frame
+.ifdef ENABLE_PCM_SOUND                             ; maintain the PCM queue on every screen
+    jsr pcm_pump                                    ; advance active sample voices
+.endif                                              ; end of optional PCM update
     lda game_state                                  ; which screen is showing?
     cmp #STATE_PLAY                                 ; the game?
     beq @play                                       ; yes: run it
@@ -2114,6 +2127,9 @@ snd_start:                                          ; start a sound on the selec
     jmp psg_set_gate                                ; start the note and return
 
 snd_silence:                                        ; release all sound channels
+.ifdef ENABLE_PCM_SOUND                             ; clear PCM voices and queued audio too
+    jsr pcm_stop                                    ; discard the pending PCM stream
+.endif                                              ; end of optional PCM reset
     ldx #7                                          ; start at the last channel
 @off:                                               ; silence the selected channel
     lda #0                                          ; clear its duration
@@ -2127,6 +2143,9 @@ snd_silence:                                        ; release all sound channels
     rts                                             ; return after silencing all channels
 
 snd_shot:                                           ; start the shot sound
+.ifdef ENABLE_PCM_SOUND                             ; use the approved sampled shot
+    jmp pcm_shot                                    ; restart the shot voice
+.else                                               ; preserve the 0.42 PSG path
     lda #<3000                                      ; low byte of the initial shot frequency
     sta ps_lo                                       ; save the frequency low byte
     lda #>3000                                      ; high byte of the initial shot frequency
@@ -2134,8 +2153,12 @@ snd_shot:                                           ; start the shot sound
     ldx #0                                          ; select the shot channel
     lda #SND_SHOT_FRAMES                            ; set the shot gate duration
     jmp snd_start                                   ; start the sound and return
+.endif                                              ; end of shot alternatives
 
 snd_explode:                                        ; start the ship explosion sound
+.ifdef ENABLE_PCM_SOUND                             ; use the approved sampled explosion
+    jmp pcm_explosion                               ; restart the explosion voice
+.else                                               ; preserve the 0.42 PSG path
     lda #SND_EXPL_LO                                ; low byte of the explosion frequency
     sta ps_lo                                       ; save the frequency low byte
     lda #SND_EXPL_HI                                ; high byte of the explosion frequency
@@ -2143,6 +2166,7 @@ snd_explode:                                        ; start the ship explosion s
     ldx #1                                          ; select the explosion channel
     lda #40                                         ; set the explosion gate duration
     jmp snd_start                                   ; start the sound and return
+.endif                                              ; end of explosion alternatives
 
 snd_march:                                          ; start the next fleet march note
     ldx bass_idx                                    ; select the current bass note

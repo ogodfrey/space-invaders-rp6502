@@ -1,0 +1,29 @@
+run 30
+press space
+run 1
+release space
+run 2
+press space
+wait shot_active 1 20
+release space
+poke bomb_active 1
+poke bomb_u 76
+poke bomb_y 180
+poke bomb_timer 7
+wait player_dead 1 20
+wait explosion_active 1 10
+peek shot_active 1
+run 12
+peek shot_active 0
+peek explosion_active 1
+run 65
+peek explosion_active 0
+peek player_dead 1
+poke shot_ptr (shot_data&255) (shot_data>>8)
+poke shot_active 1
+poke game_state 3
+poke state_timer 1
+wait game_state 0 20
+peek shot_active 0
+peek explosion_active 0
+peek pending_count 0

@@ -40,7 +40,15 @@ def explosion():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: generate_pcm.py SHOT.raw EXPLOSION.raw")
-    Path(sys.argv[1]).write_bytes(shot())
-    Path(sys.argv[2]).write_bytes(explosion())
+    game = len(sys.argv) == 4 and sys.argv[1] == "--game"
+    paths = sys.argv[2:] if game else sys.argv[1:]
+    if len(paths) != 2:
+        raise SystemExit("usage: generate_pcm.py [--game] SHOT.raw EXPLOSION.raw")
+    for path, data in zip(paths, (shot(), explosion())):
+        if game:
+            samples = [round(sample / 128)
+                       for (sample,) in struct.iter_unpack("<h", data)]
+            if max(map(abs, samples)) > 63:
+                raise ValueError(f"{path}: sample exceeds mixer headroom")
+            data = bytes(sample & 0xFF for sample in samples)
+        Path(path).write_bytes(data)

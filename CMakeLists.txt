@@ -5,6 +5,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/tools/rp6502.cmake) # RP6502 build helpers and
 project(SPACE-INVADERS ASM)                         # project name and language
 
 option(BUILD_PCM_PROTOTYPE "Build the RP6502 0.43 PCM sound experiment" OFF)
+option(ENABLE_PCM_SOUND "Use RP6502 0.43 PCM for shot and ship explosion" OFF)
 if(BUILD_PCM_PROTOTYPE)
     enable_language(C)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -31,6 +32,33 @@ if(BUILD_PCM_PROTOTYPE)
 endif()
 
 add_executable(space-invaders)                      # the ROM target
+if(ENABLE_PCM_SOUND)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(pcm_game_shot "${CMAKE_CURRENT_BINARY_DIR}/game-shot.raw")
+    set(pcm_game_explosion "${CMAKE_CURRENT_BINARY_DIR}/game-explosion.raw")
+    add_custom_command(
+        OUTPUT "${pcm_game_shot}" "${pcm_game_explosion}"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/experiments/generate_pcm.py"
+                --game "${pcm_game_shot}" "${pcm_game_explosion}"
+        DEPENDS experiments/generate_pcm.py
+        VERBATIM
+    )
+    add_custom_target(pcm-game-samples DEPENDS "${pcm_game_shot}" "${pcm_game_explosion}")
+    add_dependencies(space-invaders pcm-game-samples)
+    target_sources(space-invaders PRIVATE src/pcm-mixer.s)
+    target_compile_options(space-invaders PRIVATE
+        "$<$<COMPILE_LANGUAGE:ASM>:SHELL:--asm-define ENABLE_PCM_SOUND=1>"
+        "$<$<COMPILE_LANGUAGE:ASM>:SHELL:--asm-include-dir \"${CMAKE_CURRENT_BINARY_DIR}\">")
+    set_property(SOURCE src/pcm-mixer.s APPEND PROPERTY OBJECT_DEPENDS
+        "${pcm_game_shot};${pcm_game_explosion}")
+    set_target_properties(space-invaders PROPERTIES RP6502_EMU_VERSION 0.43)
+    rp6502_test(NAME pcm-game COMMAND tests/pcm-game.py
+        $<TARGET_PROPERTY:space-invaders,RP6502_ROM>)
+    set_tests_properties(pcm-game PROPERTIES RP6502_EMU_VERSION 0.43)
+    rp6502_test(NAME pcm-events COMMAND tests/pcm-events.script
+        $<TARGET_PROPERTY:space-invaders,RP6502_ROM>)
+    set_tests_properties(pcm-events PROPERTIES RP6502_EMU_VERSION 0.43)
+endif()
 rp6502_align(space-invaders "XRAM_.*")              # XRAM symbols must be even
 rp6502_executable(space-invaders DATA default RESET default) # package the output as a ROM
 rp6502_web(space-invaders)                          # package the ROM as a web page that runs it in the emulator

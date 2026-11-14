@@ -5,7 +5,7 @@ release space                                       # let go of Space
 run 2                                               # let the first frame of play run
 press space                                         # fire a shot
 run 1                                               # the shot sound starts
-peek xram:(XRAM_PSG+6) 1                            # channel 0's gate is on
+peek xram:(XRAM_PSG+6) (1-PCM_ENABLED)             # PSG shot is disabled in PCM builds
 release space                                       # let go of Space
 run 12                                              # the shot sound lasts 8 frames
 peek xram:(XRAM_PSG+6) 0                            # channel 0 is released

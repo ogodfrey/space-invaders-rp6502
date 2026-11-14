@@ -16,19 +16,17 @@ poke alien_timer 54
 run 1
 peek bass_idx 2                                      # the next step advances the sequence
 press space
-wait xram:(XRAM_PSG+6) 1 20                        # wait for the shot to start
+wait bullet_active 1 20                             # wait for the shot to start
 release space
-peek xram:(XRAM_PSG+6) 1                            # a shot can overlap the fleet
+run 1                                              # let the firing frame finish
+peek xram:(XRAM_PSG+6) (1-PCM_ENABLED)             # PCM replaces the PSG shot when enabled
 poke ufo_wait_lo 0
 poke ufo_wait_hi 0
-run 1
-peek xram:(XRAM_PSG+30) 1                           # the saucer flies while the shot plays
-peek xram:(XRAM_PSG+6) 1
-peek xram:(XRAM_PSG+24) 70 5                       # saucer starts at 1350 / 3 Hz
-run 1
-peek xram:(XRAM_PSG+24) 100 5                      # the frequency changes on the next frame
+wait xram:(XRAM_PSG+30) 1 10                       # the saucer flies while the shot plays
+peek xram:(XRAM_PSG+6) (1-PCM_ENABLED)
+wait xram:(XRAM_PSG+24) 130 10                     # the saucer pitch advances through its warble
+peek xram:(XRAM_PSG+25) 5
 poke grid_alive 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-run 1
-peek game_state 2                                    # wave pause
+wait game_state 2 10                                # wave pause
 peek xram:(XRAM_PSG+30) 0                           # no sustained saucer tone in the pause
 wait xram:(XRAM_PSG+6) 0 30                        # shot completes during the pause
