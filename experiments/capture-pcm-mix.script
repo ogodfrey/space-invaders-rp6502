@@ -1,0 +1,12 @@
+wait stdout "1: SHOT" 120
+press 3
+wait stdout "PSG ON" 120
+release 3
+run 5
+press 2
+wav "pcm-mix.wav" 100
+release 2
+wait stdout "DONE" 120
+press q
+wait exit 120
+expect exit 0

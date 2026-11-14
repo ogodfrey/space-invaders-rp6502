@@ -1,0 +1,11 @@
+run 30
+press space
+run 1
+release space
+run 2
+poke alien_timer 0
+poke bomb_active 1
+poke bomb_u 76
+poke bomb_y 172
+wav "psg-explosion.wav" 100
+peek lives 2

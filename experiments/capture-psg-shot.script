@@ -1,0 +1,9 @@
+run 30
+press space
+run 1
+release space
+run 2
+poke alien_timer 0
+press space
+wav "psg-shot.wav" 25
+release space

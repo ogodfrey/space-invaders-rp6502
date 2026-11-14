@@ -47,7 +47,42 @@ center the title, start prompt, alien point values, and session high score.
 Known gaps against the arcade: the attract demo is a sweep-and-fire
 autopilot, not a full copy of the arcade demo, and the high score is not
 saved between runs. Sound effects are PSG approximations rather than a
-simulation of the arcade's analog circuits; PCM playback is not used.
+simulation of the arcade's analog circuits. The game itself does not use PCM.
+
+## PCM sound experiment
+
+The optional prototype auditions original, synthesized shot and ship
+explosion samples. It requires RP6502 0.43 or newer; the normal game remains
+compatible with 0.42. This is not a circuit simulation or a recording of an
+arcade machine, and no arcade listening comparison has been made.
+
+From the project root, configure and build it separately:
+
+    cmake --preset cc65/Debug -B build/cc65/pcm -DBUILD_PCM_PROTOTYPE=ON
+    cmake --build build/cc65/pcm
+    ctest --test-dir build/cc65/pcm -R "^pcm-prototype$" --output-on-failure
+
+Run `build/cc65/pcm/pcm-prototype/pcm-prototype.rp6502` on a 0.43 machine
+or emulator. Press 1 for the shot, 2 for the explosion, 3 to toggle a PSG
+tone while auditioning PCM, and Q to exit. The samples are generated at
+build time as 8 kHz, signed 16-bit mono. Playback retries short and
+zero-length FIFO writes and waits for each effect to finish; it deliberately
+does not mix or interrupt simultaneous PCM effects. That blocking approach
+is for auditioning only, not a game-loop implementation.
+
+To capture the real emulator output for comparison, run the 0.43 emulator
+from the project root (replace `rp6502-emu` with its path if needed):
+
+    rp6502-emu --script experiments/capture-pcm-shot.script build/cc65/pcm/pcm-prototype/pcm-prototype.rp6502
+    rp6502-emu --script experiments/capture-pcm-explosion.script build/cc65/pcm/pcm-prototype/pcm-prototype.rp6502
+    rp6502-emu --script experiments/capture-psg-shot.script build/cc65/pcm/space-invaders/space-invaders.rp6502
+    rp6502-emu --script experiments/capture-psg-explosion.script build/cc65/pcm/space-invaders/space-invaders.rp6502
+    rp6502-emu --script experiments/capture-pcm-mix.script build/cc65/pcm/pcm-prototype/pcm-prototype.rp6502
+
+The scripts write WAVs in the current directory. The captures are not
+loudness-normalized; adjust playback levels when comparing them. The PSG
+captures come from the game, and the mix capture combines the experimental
+explosion with the prototype's continuous PSG tone.
 
 ## Build
 

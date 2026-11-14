@@ -1,0 +1,21 @@
+wait stdout "1: SHOT" 120
+press 1
+wait stdout "DONE" 120
+release 1
+run 2
+press 3
+wait stdout "PSG ON" 120
+release 3
+run 2
+press 2
+wait stdout "DONE" 180
+peek xram:0x1106 1
+release 2
+run 2
+press 3
+wait stdout "PSG OFF" 120
+release 3
+run 2
+press q
+wait exit 120
+expect exit 0

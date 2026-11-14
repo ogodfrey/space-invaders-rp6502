@@ -4,6 +4,32 @@ include(${CMAKE_CURRENT_LIST_DIR}/tools/rp6502.cmake) # RP6502 build helpers and
 
 project(SPACE-INVADERS ASM)                         # project name and language
 
+option(BUILD_PCM_PROTOTYPE "Build the RP6502 0.43 PCM sound experiment" OFF)
+if(BUILD_PCM_PROTOTYPE)
+    enable_language(C)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(pcm_shot "${CMAKE_CURRENT_BINARY_DIR}/pcm-shot.raw")
+    set(pcm_explosion "${CMAKE_CURRENT_BINARY_DIR}/pcm-explosion.raw")
+    add_custom_command(
+        OUTPUT "${pcm_shot}" "${pcm_explosion}"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/experiments/generate_pcm.py"
+                "${pcm_shot}" "${pcm_explosion}"
+        DEPENDS experiments/generate_pcm.py
+        VERBATIM
+    )
+    add_executable(pcm-prototype experiments/pcm-prototype.c)
+    set_target_properties(pcm-prototype PROPERTIES RP6502_EMU_VERSION 0.43)
+    rp6502_asset(pcm-prototype shot.pcm "${pcm_shot}")
+    rp6502_asset(pcm-prototype explosion.pcm "${pcm_explosion}")
+    rp6502_executable(pcm-prototype DATA default RESET default)
+    rp6502_test(NAME pcm-prototype COMMAND tests/pcm-prototype.script
+        $<TARGET_PROPERTY:pcm-prototype,RP6502_ROM>)
+    set_tests_properties(pcm-prototype PROPERTIES RP6502_EMU_VERSION 0.43)
+    rp6502_test(NAME pcm-audio COMMAND tests/pcm-audio.py
+        $<TARGET_PROPERTY:pcm-prototype,RP6502_ROM>)
+    set_tests_properties(pcm-audio PROPERTIES RP6502_EMU_VERSION 0.43)
+endif()
+
 add_executable(space-invaders)                      # the ROM target
 rp6502_align(space-invaders "XRAM_.*")              # XRAM symbols must be even
 rp6502_executable(space-invaders DATA default RESET default) # package the output as a ROM

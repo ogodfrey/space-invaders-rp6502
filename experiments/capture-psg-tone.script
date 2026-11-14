@@ -1,0 +1,9 @@
+wait stdout "1: SHOT" 120
+press 3
+wait stdout "PSG ON" 120
+release 3
+run 5
+wav "psg-tone.wav" 100
+press q
+wait exit 120
+expect exit 0

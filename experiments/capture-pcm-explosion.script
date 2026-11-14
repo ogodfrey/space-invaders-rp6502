@@ -1,0 +1,8 @@
+wait stdout "1: SHOT" 120
+press 2
+wav "pcm-explosion.wav" 100
+release 2
+wait stdout "DONE" 120
+press q
+wait exit 120
+expect exit 0
