@@ -87,20 +87,20 @@ str_wave:                                           ; wave counter label
     .byte "WAVE "                                   ; shown before the wave number
 str_wave_len = * - str_wave                         ; length of the label
 str_pts_squid:                                      ; the point values on the title screen
-    .byte "30 POINTS  SQUID"
-str_pts_squid_len = * - str_pts_squid
-str_pts_crab:
-    .byte "20 POINTS  CRAB"
-str_pts_crab_len = * - str_pts_crab
-str_pts_octo:
-    .byte "10 POINTS  OCTOPUS"
-str_pts_octo_len = * - str_pts_octo
-str_pts_ufo:
-    .byte "? MYSTERY  SAUCER"
-str_pts_ufo_len = * - str_pts_ufo
+    .byte "30 POINTS  SQUID"                        ; title-screen squid value and name
+str_pts_squid_len = * - str_pts_squid               ; length of the squid points text
+str_pts_crab:                                       ; title-screen crab points text
+    .byte "20 POINTS  CRAB"                         ; crab value and name
+str_pts_crab_len = * - str_pts_crab                 ; length of the crab points text
+str_pts_octo:                                       ; title-screen octopus points text
+    .byte "10 POINTS  OCTOPUS"                      ; octopus value and name
+str_pts_octo_len = * - str_pts_octo                 ; length of the octopus points text
+str_pts_ufo:                                        ; title-screen saucer points text
+    .byte "? MYSTERY  SAUCER"                       ; mystery value and saucer name
+str_pts_ufo_len = * - str_pts_ufo                   ; length of the saucer points text
 str_hiscore:                                        ; label on the high-score screen
-    .byte "HIGH SCORE"
-str_hiscore_len = * - str_hiscore
+    .byte "HIGH SCORE"                              ; high-score label text
+str_hiscore_len = * - str_hiscore                   ; length of the high-score label
 
 div_lo:     .byte <10000, <1000, <100, <10, <1      ; low bytes of decimal place values
 div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal place values
@@ -109,11 +109,11 @@ div_hi:     .byte >10000, >1000, >100, >10, >1      ; high bytes of decimal plac
 shield_left_u:                                      ; left edge of each bunker, in 2-pixel units
     .byte 33, 61, 89, 117                           ; spread across the field
 shield_base:                                        ; first cell index of each bunker
-    .byte 0, 44, 88, 132
+    .byte 0, 44, 88, 132                            ; first cell index for each bunker
 shield_roff:                                        ; first cell index of each row within a bunker
-    .byte 0, 11, 22, 33
+    .byte 0, 11, 22, 33                             ; first cell index for each bunker row
 shield_row_py:                                      ; top row of each cell row, in pixels
-    .byte 158, 162, 166, 170
+    .byte 158, 162, 166, 170                        ; pixel y coordinate for each bunker row
 shield_template:                                    ; the full shape of one bunker: 1 = cell, 0 = gap
     .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 0
     .byte 1,1,1,1,1,1,1,1,1,1,1                     ; row 1
@@ -122,29 +122,29 @@ shield_template:                                    ; the full shape of one bunk
 
 ; Points for the bonus saucer. The value is picked by the number of shots fired
 ; (mod 16) when the saucer is hit. Low and high bytes, 16 entries.
-ufo_pts_lo:
+ufo_pts_lo:                                         ; low bytes of the saucer point values
     .byte $64, $32, $32, $64, $96, $64, $64, $32    ; 100 50 50 100 150 100 100 50
     .byte $2C, $64, $64, $64, $32, $96, $64, $32    ; 300 100 100 100 50 150 100 50
 ; Bassline: four notes that step down, repeated for the whole wave.
 ; Frequencies in 1/3 Hz: 294 (98 Hz), 276 (92 Hz), 261 (87 Hz), 246 (82 Hz).
-bass_lo:
+bass_lo:                                            ; low bytes of the fleet bass notes
     .byte $26, $14, $05, $F6                        ; low bytes of the four notes
-bass_hi:
+bass_hi:                                            ; high bytes of the fleet bass notes
     .byte $01, $01, $01, $00                        ; high bytes of the four notes
 ; Frequency units are 1/3 Hz. Tables are stepped once per video frame.
-shot_freq_lo:
-    .lobytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000
-shot_freq_hi:
-    .hibytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000
-ufo_freq_lo:
-    .lobytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560
-    .lobytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380
-ufo_freq_hi:
-    .hibytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560
-    .hibytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380
-ufo_pts_hi:
+shot_freq_lo:                                       ; shot pitch table, low bytes
+    .lobytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000 ; low bytes of the eight shot pitches
+shot_freq_hi:                                       ; shot pitch table, high bytes
+    .hibytes 900, 1050, 1230, 1440, 1710, 2040, 2460, 3000 ; high bytes of the eight shot pitches
+ufo_freq_lo:                                        ; saucer pitch table, low bytes
+    .lobytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560 ; low bytes for the rising half of the warble
+    .lobytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380 ; low bytes for the falling half of the warble
+ufo_freq_hi:                                        ; saucer pitch table, high bytes
+    .hibytes 1350, 1380, 1410, 1440, 1470, 1500, 1530, 1560 ; high bytes for the rising half of the warble
+    .hibytes 1590, 1560, 1530, 1500, 1470, 1440, 1410, 1380 ; high bytes for the falling half of the warble
+ufo_pts_hi:                                         ; high bytes of the saucer point values
     .byte 0, 0, 0, 0, 0, 0, 0, 0                    ; 300 needs the high byte
-    .byte 1, 0, 0, 0, 0, 0, 0, 0
+    .byte 1, 0, 0, 0, 0, 0, 0, 0                    ; high bytes for the last eight point values
 
 palette_rom:                                        ; 16 colors, 2 bytes each, for the bitmap
     COLOR_FROM_RGBA 0, 0, 0, 255            ; 0: black
@@ -277,13 +277,13 @@ grid_type2:                                         ; sprite type of each grid a
     .endrepeat                                      ; end of the columns
 .endrepeat                                          ; end of the rows
 alien_src_lo:                                       ; low byte of each alien sprite address
-    .byte <XRAM_SQUID_A, <XRAM_SQUID_B, <XRAM_CRAB_A, <XRAM_CRAB_B, <XRAM_OCTO_A, <XRAM_OCTO_B
+    .byte <XRAM_SQUID_A, <XRAM_SQUID_B, <XRAM_CRAB_A, <XRAM_CRAB_B, <XRAM_OCTO_A, <XRAM_OCTO_B ; low address bytes for both frames of each alien
 alien_src_hi:                                       ; high byte of each alien sprite address
-    .byte >XRAM_SQUID_A, >XRAM_SQUID_B, >XRAM_CRAB_A, >XRAM_CRAB_B, >XRAM_OCTO_A, >XRAM_OCTO_B
+    .byte >XRAM_SQUID_A, >XRAM_SQUID_B, >XRAM_CRAB_A, >XRAM_CRAB_B, >XRAM_OCTO_A, >XRAM_OCTO_B ; high address bytes for both frames of each alien
 bomb_src_lo:                                        ; low byte of each bomb animation frame's address
-    .byte <XRAM_BOMB_SPRITE, <XRAM_BOMB_SPRITE_B
+    .byte <XRAM_BOMB_SPRITE, <XRAM_BOMB_SPRITE_B    ; low address bytes for both bomb frames
 bomb_src_hi:                                        ; high byte of each bomb animation frame's address
-    .byte >XRAM_BOMB_SPRITE, >XRAM_BOMB_SPRITE_B
+    .byte >XRAM_BOMB_SPRITE, >XRAM_BOMB_SPRITE_B    ; high address bytes for both bomb frames
 grid_points:                                        ; points for each alien, by row, as in arcade
 .repeat GRID_ROWS, R                                ; one group of columns per row
     .repeat GRID_COLS, C                            ; one entry per column
@@ -1886,7 +1886,7 @@ timed_frame:                                        ; count down a pause
     beq @to_title                                   ; yes: back to the title
     jmp start_next_wave                             ; no: a wave is clear
 @to_title:                                          ; return to the title screen
-    jmp enter_title
+    jmp enter_title                                 ; enter the title screen
 @wait:                                              ; keep waiting
     rts                                             ; return
 
@@ -1939,24 +1939,24 @@ draw_hiscore:                                       ; the high-score attract scr
     PUT_STR str_hiscore, str_hiscore_len            ; print the label
     lda #11                                         ; the score's row
     sta cur_row                                     ; set the row
-    ldx #0
-@digits:
-    lda hi_hi
-    cmp div_hi,x
-    bcc @shorter
-    bne @center
-    lda hi_lo
-    cmp div_lo,x
-    bcs @center
-@shorter:
-    inx
-    cpx #4
-    bne @digits
-@center:
-    txa
-    clc
+    ldx #0                                          ; start with the ten-thousands place
+@digits:                                            ; find the highest decimal place in the score
+    lda hi_hi                                       ; high byte of the best score
+    cmp div_hi,x                                    ; compare with this decimal divisor's high byte
+    bcc @shorter                                    ; score is below this place
+    bne @center                                     ; greater high byte means this place is present
+    lda hi_lo                                       ; equal high bytes: check the score's low byte
+    cmp div_lo,x                                    ; compare with the divisor's low byte
+    bcs @center                                     ; score reaches this place: center it
+@shorter:                                           ; try a smaller decimal place
+    inx                                             ; advance to the next divisor
+    cpx #4                                          ; stop at the ones place
+    bne @digits                                     ; test the next place unless it is the ones place
+@center:                                            ; calculate the centered column
+    txa                                             ; move the leading-place index to A
+    clc                                             ; clear carry before adding
     adc #35                                         ; 40 columns minus (5 - X) digits
-    lsr a
+    lsr a                                           ; divide the remaining columns by two
     sta cur_col                                     ; set the column
     jsr goto_xy                                     ; move the cursor there
     jsr print_hi                                    ; print the best score
@@ -2099,198 +2099,198 @@ psg_set_gate:                                       ; set a channel's gate
     sta RIA_RW0                                     ; write it
     rts                                             ; return
 
-sound_offs:
-    .byte 0, 8, 16, 24, 32, 40, 48, 56
+sound_offs:                                         ; PSG channel byte-offset table
+    .byte 0, 8, 16, 24, 32, 40, 48, 56              ; eight channel offsets, eight bytes apart
 
 ; X is the channel, A is its gate duration, and ps_lo/ps_hi are its frequency.
-snd_start:
-    sta effect_frames,x
-    lda sound_offs,x
-    sta ps_off
-    lda #0
-    jsr psg_set_gate
-    jsr psg_set_freq
-    lda #1
-    jmp psg_set_gate
+snd_start:                                          ; start a sound on the selected channel
+    sta effect_frames,x                             ; save its gate duration
+    lda sound_offs,x                                ; look up the channel's PSG offset
+    sta ps_off                                      ; select that offset for PSG writes
+    lda #0                                          ; prepare to release the gate
+    jsr psg_set_gate                                ; release any previous note
+    jsr psg_set_freq                                ; write the new frequency
+    lda #1                                          ; prepare to open the gate
+    jmp psg_set_gate                                ; start the note and return
 
-snd_silence:
-    ldx #7
-@off:
-    lda #0
-    sta effect_frames,x
-    lda sound_offs,x
-    sta ps_off
-    lda #0
-    jsr psg_set_gate
-    dex
-    bpl @off
-    rts
+snd_silence:                                        ; release all sound channels
+    ldx #7                                          ; start at the last channel
+@off:                                               ; silence the selected channel
+    lda #0                                          ; clear its duration
+    sta effect_frames,x                             ; cancel its effect timer
+    lda sound_offs,x                                ; look up its PSG offset
+    sta ps_off                                      ; select that channel
+    lda #0                                          ; prepare to release its gate
+    jsr psg_set_gate                                ; release the note
+    dex                                             ; select the preceding channel
+    bpl @off                                        ; repeat through channel zero
+    rts                                             ; return after silencing all channels
 
-snd_shot:
-    lda #<3000
-    sta ps_lo
-    lda #>3000
-    sta ps_hi
-    ldx #0
-    lda #SND_SHOT_FRAMES
-    jmp snd_start
+snd_shot:                                           ; start the shot sound
+    lda #<3000                                      ; low byte of the initial shot frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>3000                                      ; high byte of the initial shot frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #0                                          ; select the shot channel
+    lda #SND_SHOT_FRAMES                            ; set the shot gate duration
+    jmp snd_start                                   ; start the sound and return
 
-snd_explode:
-    lda #SND_EXPL_LO
-    sta ps_lo
-    lda #SND_EXPL_HI
-    sta ps_hi
-    ldx #1
-    lda #40
-    jmp snd_start
+snd_explode:                                        ; start the ship explosion sound
+    lda #SND_EXPL_LO                                ; low byte of the explosion frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #SND_EXPL_HI                                ; high byte of the explosion frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #1                                          ; select the explosion channel
+    lda #40                                         ; set the explosion gate duration
+    jmp snd_start                                   ; start the sound and return
 
-snd_march:
-    ldx bass_idx
-    lda bass_lo,x
-    sta ps_lo
-    lda bass_hi,x
-    sta ps_hi
-    inx
-    txa
-    and #3
-    sta bass_idx
-    ldx #2
-    lda #2
-    jmp snd_start
+snd_march:                                          ; start the next fleet march note
+    ldx bass_idx                                    ; select the current bass note
+    lda bass_lo,x                                   ; load its frequency low byte
+    sta ps_lo                                       ; save the frequency low byte
+    lda bass_hi,x                                   ; load its frequency high byte
+    sta ps_hi                                       ; save the frequency high byte
+    inx                                             ; advance to the next note
+    txa                                             ; move the next note index into A
+    and #3                                          ; wrap the index to four notes
+    sta bass_idx                                    ; save the next bass note index
+    ldx #2                                          ; select the fleet channel
+    lda #2                                          ; set the march gate duration
+    jmp snd_start                                   ; start the sound and return
 
-snd_ufo_on:
-    lda #0
-    sta ufo_warble
-    lda #<1350
-    sta ps_lo
-    lda #>1350
-    sta ps_hi
-    ldx #3
+snd_ufo_on:                                         ; start the saucer tone
+    lda #0                                          ; reset the warble phase
+    sta ufo_warble                                  ; save the initial phase
+    lda #<1350                                      ; low byte of the initial saucer frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>1350                                      ; high byte of the initial saucer frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #3                                          ; select the saucer channel
     lda #0                                          ; continuous until explicitly stopped
-    jmp snd_start
+    jmp snd_start                                   ; start the continuous tone and return
 
-snd_ufo_off:
-    lda #24
-    sta ps_off
-    lda #0
-    jmp psg_set_gate
+snd_ufo_off:                                        ; stop the saucer tone
+    lda #24                                         ; PSG offset of the saucer channel
+    sta ps_off                                      ; select that channel
+    lda #0                                          ; prepare to release its gate
+    jmp psg_set_gate                                ; release the note and return
 
-snd_alien_hit:
-    lda #<4500
-    sta ps_lo
-    lda #>4500
-    sta ps_hi
-    ldx #4
-    lda #8
-    jmp snd_start
+snd_alien_hit:                                      ; start the alien-hit sound
+    lda #<4500                                      ; low byte of the alien-hit frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>4500                                      ; high byte of the alien-hit frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #4                                          ; select the alien-hit channel
+    lda #8                                          ; set the gate duration
+    jmp snd_start                                   ; start the sound and return
 
-snd_saucer_hit:
-    lda #<1800
-    sta ps_lo
-    lda #>1800
-    sta ps_hi
-    ldx #5
-    lda #24
-    jmp snd_start
+snd_saucer_hit:                                     ; start the saucer-hit sound
+    lda #<1800                                      ; low byte of the initial saucer-hit frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>1800                                      ; high byte of the initial saucer-hit frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #5                                          ; select the saucer-hit channel
+    lda #24                                         ; set the gate duration
+    jmp snd_start                                   ; start the sound and return
 
-snd_bonus:
-    lda #<2100
-    sta ps_lo
-    lda #>2100
-    sta ps_hi
-    ldx #6
-    lda #30
-    jmp snd_start
+snd_bonus:                                          ; start the bonus-ship sound
+    lda #<2100                                      ; low byte of the initial bonus frequency
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>2100                                      ; high byte of the initial bonus frequency
+    sta ps_hi                                       ; save the frequency high byte
+    ldx #6                                          ; select the bonus channel
+    lda #30                                         ; set the gate duration
+    jmp snd_start                                   ; start the sound and return
 
 ; Advance every transient even during wave and game-over pauses.
-update_sound:
-    ldx #6
-@timers:
-    lda effect_frames,x
-    beq @next
-    dec effect_frames,x
-    bne @next
-    lda sound_offs,x
-    sta ps_off
-    lda #0
-    jsr psg_set_gate
-@next:
-    dex
-    bpl @timers
-    lda effect_frames
-    beq @explosion
-    tax
-    dex
-    lda shot_freq_lo,x
-    sta ps_lo
-    lda shot_freq_hi,x
-    sta ps_hi
-    lda #0
-    sta ps_off
-    jsr psg_set_freq
-@explosion:
-    lda effect_frames+1
-    beq @saucer_hit
-    lsr a
-    lsr a
-    lsr a
-    clc
-    adc #4
-    sta ps_hi
-    lda #0
-    sta ps_lo
-    lda #8
-    sta ps_off
-    jsr psg_set_freq
-@saucer_hit:
-    lda effect_frames+5
-    beq @bonus
-    and #15
-    tax
-    lda ufo_freq_lo,x
-    sta ps_lo
-    lda ufo_freq_hi,x
-    sta ps_hi
-    lda #40
-    sta ps_off
-    jsr psg_set_freq
-@bonus:
-    lda effect_frames+6
-    beq @warble
-    and #4
-    beq @bonus_low
-    lda #<2400
-    sta ps_lo
-    lda #>2400
-    bne @bonus_write
-@bonus_low:
-    lda #<1800
-    sta ps_lo
-    lda #>1800
-@bonus_write:
-    sta ps_hi
-    lda #48
-    sta ps_off
-    jsr psg_set_freq
-@warble:
-    lda game_state
-    cmp #STATE_PLAY
-    bne @done
-    lda ufo_active
-    beq @done
-    inc ufo_warble
-    lda ufo_warble
-    and #15
-    tax
-    lda ufo_freq_lo,x
-    sta ps_lo
-    lda ufo_freq_hi,x
-    sta ps_hi
-    lda #24
-    sta ps_off
-    jmp psg_set_freq
-@done:
-    rts
+update_sound:                                       ; advance sound timers and update pitches
+    ldx #6                                          ; start with the last transient channel
+@timers:                                            ; process this channel's timer
+    lda effect_frames,x                             ; load the remaining gate duration
+    beq @next                                       ; skip an inactive timer
+    dec effect_frames,x                             ; count down one frame
+    bne @next                                       ; leave the gate open while time remains
+    lda sound_offs,x                                ; look up the expired channel's PSG offset
+    sta ps_off                                      ; select that channel
+    lda #0                                          ; prepare to release its gate
+    jsr psg_set_gate                                ; release the expired note
+@next:                                              ; advance to the next timer
+    dex                                             ; select the preceding channel
+    bpl @timers                                     ; repeat through channel zero
+    lda effect_frames                               ; load the shot timer
+    beq @explosion                                  ; skip the shot pitch update if inactive
+    tax                                             ; use the timer as a table index
+    dex                                             ; convert the remaining duration to a zero-based index
+    lda shot_freq_lo,x                              ; load the shot pitch low byte
+    sta ps_lo                                       ; save the frequency low byte
+    lda shot_freq_hi,x                              ; load the shot pitch high byte
+    sta ps_hi                                       ; save the frequency high byte
+    lda #0                                          ; PSG offset of the shot channel
+    sta ps_off                                      ; select that channel
+    jsr psg_set_freq                                ; write the updated shot pitch
+@explosion:                                         ; update the explosion pitch
+    lda effect_frames+1                             ; load the explosion timer
+    beq @saucer_hit                                 ; skip its pitch update if inactive
+    lsr a                                           ; divide the remaining frames by two
+    lsr a                                           ; divide again by two
+    lsr a                                           ; divide again by two, for a total of eight
+    clc                                             ; clear carry before adding the pitch base
+    adc #4                                          ; add the explosion frequency high-byte base
+    sta ps_hi                                       ; save the resulting frequency high byte
+    lda #0                                          ; use zero as the frequency low byte
+    sta ps_lo                                       ; save the frequency low byte
+    lda #8                                          ; PSG offset of the explosion channel
+    sta ps_off                                      ; select that channel
+    jsr psg_set_freq                                ; write the updated explosion pitch
+@saucer_hit:                                        ; update the saucer-hit pitch
+    lda effect_frames+5                             ; load the saucer-hit timer
+    beq @bonus                                      ; skip its pitch update if inactive
+    and #15                                         ; wrap the timer to the 16-entry pitch table
+    tax                                             ; use the result as the table index
+    lda ufo_freq_lo,x                               ; load the selected pitch low byte
+    sta ps_lo                                       ; save the frequency low byte
+    lda ufo_freq_hi,x                               ; load the selected pitch high byte
+    sta ps_hi                                       ; save the frequency high byte
+    lda #40                                         ; PSG offset of the saucer-hit channel
+    sta ps_off                                      ; select that channel
+    jsr psg_set_freq                                ; write the updated saucer-hit pitch
+@bonus:                                             ; update the bonus-ship pitch
+    lda effect_frames+6                             ; load the bonus timer
+    beq @warble                                     ; skip its pitch update if inactive
+    and #4                                          ; test the alternating-pitch bit
+    beq @bonus_low                                  ; use the lower pitch when the bit is clear
+    lda #<2400                                      ; low byte of the higher bonus pitch
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>2400                                      ; high byte of the higher bonus pitch
+    bne @bonus_write                                ; write the selected high byte
+@bonus_low:                                         ; select the lower bonus pitch
+    lda #<1800                                      ; low byte of the lower bonus pitch
+    sta ps_lo                                       ; save the frequency low byte
+    lda #>1800                                      ; high byte of the lower bonus pitch
+@bonus_write:                                       ; finish writing the bonus pitch
+    sta ps_hi                                       ; save the frequency high byte
+    lda #48                                         ; PSG offset of the bonus channel
+    sta ps_off                                      ; select that channel
+    jsr psg_set_freq                                ; write the updated bonus pitch
+@warble:                                            ; update the active saucer warble
+    lda game_state                                  ; load the current game state
+    cmp #STATE_PLAY                                 ; is the game playing?
+    bne @done                                       ; skip the warble outside play
+    lda ufo_active                                  ; check whether a saucer is active
+    beq @done                                       ; skip the warble if none is active
+    inc ufo_warble                                  ; advance the warble phase
+    lda ufo_warble                                  ; load the new phase
+    and #15                                         ; wrap it to the 16-entry pitch table
+    tax                                             ; use the phase as the table index
+    lda ufo_freq_lo,x                               ; load the saucer pitch low byte
+    sta ps_lo                                       ; save the frequency low byte
+    lda ufo_freq_hi,x                               ; load the saucer pitch high byte
+    sta ps_hi                                       ; save the frequency high byte
+    lda #24                                         ; PSG offset of the saucer channel
+    sta ps_off                                      ; select that channel
+    jmp psg_set_freq                                ; write the updated saucer pitch and return
+@done:                                              ; no further sound updates
+    rts                                             ; return to the frame update
 
 ; ---- bonus saucer ----
 
