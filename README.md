@@ -69,7 +69,11 @@ The resulting ROM is
 `build/cc65/game-pcm/space-invaders/space-invaders.rp6502`. It requires
 RP6502 0.43 or newer. The samples are generated at build time as 8 kHz,
 8-bit mono and are twice the prototype's amplitude before quantization.
-Sound quality and relative loudness still need listening tests on hardware.
+The PCM build was auditioned on RP6502 hardware; no comparison against an
+arcade machine has been made.
+
+Releases include both `space-invaders.rp6502` (PSG, 0.42+) and
+`space-invaders-pcm.rp6502` (PCM, 0.43+). The published web build uses PSG.
 
 ## PCM sound experiment
 
