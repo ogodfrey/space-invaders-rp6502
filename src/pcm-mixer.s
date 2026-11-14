@@ -25,7 +25,6 @@ mix_value: .res 1
 
 .segment "RODATA"
 pcm_path: .byte "PCM:8000,8,1"
-pcm_path_end:
 pcm_error: .byte "PCM AUDIO ERROR (RP6502 0.43 REQUIRED)", 13, 10, 0
 shot_data: .incbin "game-shot.raw"
 shot_end:
@@ -35,9 +34,9 @@ explosion_end:
 .segment "CODE"
 
 pcm_init:
-    ldx #pcm_path_end-pcm_path-1
+    ldx #11                                         ; last byte of pcm_path
 @path:
-    lda pcm_path,x
+    lda a:.loword(pcm_path),x
     sta RIA_XSTACK
     dex
     bpl @path
@@ -80,7 +79,7 @@ pcm_stop:
     stz explosion_active
     stz pending_count
     lda #2                                          ; cc65 SEEK_SET
-    jsr pcm_seek
+    jsr .loword(pcm_seek)
     cpx #$FF
     jeq pcm_fatal
     rts
@@ -109,7 +108,7 @@ pcm_pump:
     ora explosion_active
     jeq @done
     lda #0                                          ; cc65 SEEK_CUR: queue level
-    jsr pcm_seek
+    jsr .loword(pcm_seek)
     cpx #$FF
     jeq pcm_fatal
     cpx #0
